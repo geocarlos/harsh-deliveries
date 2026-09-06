@@ -1,0 +1,14 @@
+# OpenUSD pipeline
+.conda-env/
+pipeline/.build/
+pipeline/__pycache__/
+public/assets/models/*
+!public/assets/models/.gitkeep
+
+# Node / web runtime
+node_modules/
+dist/
+.vite/
+
+# Editor / OS
+.DS_Store
