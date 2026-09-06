@@ -2,7 +2,7 @@
 
 **Status:** Draft v1 — architectural design only, no generator code written against it yet. Derived from `docs/game-design/` Modules 1–4 (Version 0, approved) plus the existing pipeline scaffold in `pipeline/` (`usd_utils.py`, `export_utils.py`, `build_assets.py`).
 
-**Scope note (read first):** This roadmap covers **Vehicles, Cargo, Terrain/Geography, Hazards, and Props** — the five categories the brief named. It deliberately does **not** cover 3D **Runner (character) models**. Modules 1–2 write the six runners as fully-authored personalities and driving-trait profiles, but never once describe a physical appearance, and Module 2's own deliverable list is "Runner Roster + Vehicle Roster" — vehicles get a geometry-bearing design framework (Durability, Cargo Care, Terrain Traction, Profile, Capacity — all physical/visual axes), while runners get a purely behavioral one (Handling, Cargo Care, Nerve, Terrain Reading, Leverage — none of which imply a model needs to exist). Given the game is a vehicle-drive game (Module 1 §5, "The Drive" is the core session) with no stated third-person-out-of-vehicle or dialogue-closeup gameplay, runners most likely surface as 2D portrait/UI art (dispatch board, radio chatter) rather than rigged humanoid meshes. **This is a scoping call, not a design decision already made in the docs** — flagging it explicitly rather than silently absorbing character art into an OpenUSD pipeline built for hard-surface modular kits. If runners do need in-world 3D presence later (e.g. a visible driver silhouette in-cab), that's a separate, later roadmap addendum — humanoid rigging is a different enough problem (skinning/skeletons through the same Blender glTF conversion) that it shouldn't be quietly folded into Phase 3's vehicle rigging scope.
+**Scope note (read first, updated):** This roadmap's asset-*production* focus for Phases 0–5 is **Vehicles, Cargo, Terrain/Geography, Hazards, and Props** — the five categories the brief named. **Runner (character) models are intentionally not full-detail production content in this pass**, but they are not out-of-architecture either: the producer has flagged on-foot gameplay (sneaking away from a parked vehicle, commandeering a second vehicle to run interference for the cargo vehicle) as a real future direction, not a hypothetical — so runners get a reserved category, naming convention, and vehicle-side mount/dismount hardpoints *now* (§1.6, §2.3), populated today with placeholder geometry (a capsule or billboard card, not a rigged humanoid), so that swapping in real character models later is a content change, not an architecture change. Full humanoid rigging (skeleton/skinning through the Blender glTF path, walk/sneak animation) stays explicitly deferred — see the "Phase 6 (Deferred)" note at the end of §3 — but nothing in Phases 0–5 should make that later work harder than it has to be.
 
 ---
 
@@ -74,11 +74,22 @@
 - Small clutter kit (barrels, loose crates, debris) — reuses Cargo Container shell kit geometry where sensible (a "damaged crate" prop *is* a cargo crate mesh, just placed as static dressing).
 - Checkpoint/patrol dressing (tents, barrier stacks) shared with the Hazard category's Checkpoint asset.
 
-### 1.6 Cross-category modularity summary
+### 1.6 Runners / Characters (placeholder now, on-foot hooks reserved)
+
+**Now (in scope for Phase 2, see §3):** each of the 6 roster runners gets a trivial placeholder proxy — a flat billboard card (portrait-image texture, always-faces-camera or simply front-facing) or a plain capsule mesh, whichever reads better standing in a vehicle seat or a dispatch-board scene. No skeleton, no walk cycle, no per-runner silhouette modeling. Authored under a new `Character` category (§2.1/§2.7) so the naming/hardpoint conventions it needs already exist before any real geometry does.
+
+**Reserved, not scheduled (future):** the producer wants to keep open the possibility of a runner acting independent of their vehicle — leaving it parked to sneak into a location on foot, or commandeering a second, unattended vehicle to run interference/decoy for the one actually carrying cargo. Neither mechanic is committed content in Phases 0–5, but two cheap architectural hooks go in now specifically so this stays possible later without revisiting already-shipped assets:
+
+- **Vehicle mount/dismount hardpoints** — every vehicle (Phase 3) gets `Hardpoints/DriverSeat` and `Hardpoints/ExitPoint` markers (§2.3), the same way cargo beds already get `TieDown_NN` markers. A placeholder character parented to `DriverSeat` today, or unparented at `ExitPoint` in a future on-foot build, needs zero vehicle-asset rework either way — the hardpoint is the contract, not the geometry behind it.
+- **Vehicle-agnostic driver identity** — nothing in the Phase 3 vehicle spec assumes a specific driver (player runner vs. AI pursuer/escort skin, §1.4); the same chassis asset already serves both, which is exactly the property "commandeer any nearby vehicle" would need if it's ever built — no new vehicle variant class required for that mechanic, only new gameplay logic.
+
+A full "Phase 6" for humanoid rigging, on-foot locomotion/stealth animation, and vehicle mount/dismount runtime logic is named at the end of §3 as a placeholder for that future work — deliberately not scoped in detail here, since Version 0 of the game design has no on-foot mission content to build it against yet.
+
+### 1.7 Cross-category modularity summary
 
 The same four kits recur under every category, which is the intended payoff of "modular sub-components" (CLAUDE.md constraint #2):
 
-1. **Hardpoint/tie-down convention** — used by Cargo (pallets) and Vehicles (beds) identically.
+1. **Hardpoint/tie-down convention** — used by Cargo (pallets), Vehicles (beds, and now driver seat/exit points), and Characters (anchor point) identically.
 2. **Hinge/latch convention** — used by Vehicles (doors, cargo latches) and Hazards (checkpoint gate arms) identically.
 3. **Tile-snap convention** — used by Terrain exclusively, but its trigger-marker sub-pattern (§2.3) is reused by Hazards (Hot Zone, Ambush Point) for placement markers.
 4. **Prop/dressing kit** — shared raw material between Terrain (biome dressing), Hazards (Ambush cover, Checkpoint tents), and Props (clutter, wreckage) — one kit, many placements.
@@ -98,7 +109,9 @@ The same four kits recur under every category, which is the intended payoff of "
   /Materials                            Scope — UsdShade.Material library (already `usd_utils.get_material()`'s convention)
 ```
 
-`<Category>` is one of `Vehicle`, `Cargo`, `Terrain`, `Hazard`, `Prop`. This keeps every asset's default prim self-describing when flattened/inspected standalone (e.g. in `usdview` or a bug report), and gives the glTF exporter a predictable single root node per asset.
+`<Category>` is one of `Vehicle`, `Cargo`, `Terrain`, `Hazard`, `Prop`, `Character`. This keeps every asset's default prim self-describing when flattened/inspected standalone (e.g. in `usdview` or a bug report), and gives the glTF exporter a predictable single root node per asset.
+
+**`Character` is a reserved, minimal-content category for now** (§1.6) — a placeholder asset (`/Character_MaraItoh`, etc.) only needs `Geometry` (the capsule/billboard proxy) and `Hardpoints/Anchor` (the single point that aligns to whichever vehicle `Hardpoints/DriverSeat` it's parented to, or to world space when standing on foot in a future build). `Rig` and `Collision` stay empty/unused until real humanoid geometry replaces the placeholder — the scope skeleton exists so that swap doesn't require renaming or restructuring anything referencing the character asset.
 
 ### 2.2 Rig scope — animatable entities
 
@@ -125,12 +138,15 @@ Zero-geometry Xforms (translate-only, no mesh child) whose **world position is t
 ```
 /Vehicle_Mule/Hardpoints/TieDown_01 .. _04      # bed tie-down points
 /Cargo_GlassCase/Hardpoints/TieDown_01 .. _04   # matching convention on the cargo side
+/Vehicle_Mule/Hardpoints/DriverSeat             # runner mount point (§1.6) — every vehicle gets one
+/Vehicle_Mule/Hardpoints/ExitPoint              # where a dismounted runner appears alongside the vehicle
+/Character_MaraItoh/Hardpoints/Anchor           # the character-side point that aligns to DriverSeat/ExitPoint
 /Terrain_Washout/Hardpoints/ConnectIn           # tile-snap edge marker
 /Terrain_Washout/Hardpoints/ConnectOut
 /Hazard_HotZone/Hardpoints/TriggerCenter        # placement marker for the gameplay-side trigger volume
 ```
 
-Tie-down points are named identically (`TieDown_01`..`TieDown_04`) on both the vehicle-bed side and the cargo side specifically so a future loadout-assembly script can align a cargo prim into a vehicle-bed prim by matching hardpoint names/counts, rather than hand-placed per pairing.
+Tie-down points are named identically (`TieDown_01`..`TieDown_04`) on both the vehicle-bed side and the cargo side specifically so a future loadout-assembly script can align a cargo prim into a vehicle-bed prim by matching hardpoint names/counts, rather than hand-placed per pairing. `DriverSeat`/`ExitPoint`/`Anchor` follow the same logic one level up: a runner (placeholder or, later, a real rigged character) is positioned by matching its `Anchor` to a vehicle's `DriverSeat`, not by any vehicle- or character-specific placement code — the same reason this pays off for cargo pays off here for the future on-foot mechanic (§1.6), at effectively zero cost today since it's one more marker Xform per vehicle.
 
 ### 2.4 Metadata strategy — the one open risk this roadmap flags explicitly
 
@@ -197,11 +213,13 @@ Each phase is scoped to fit one focused development session and produces a concr
 - Cargo container kit (§1.2): crate, drum, glass case, sealed container, machine-parts crate — all sharing the pallet-base + `TieDown_01..04` hardpoint convention.
 - Prop kit (§1.5): signage, wreckage (two dressing states per §1.3's variant note), barricade/checkpoint booth static geometry (rigging deferred to Phase 5 alongside the gate-arm hinge, since Checkpoint's *hinge* needs the Phase 0 rig helpers exercised on a non-vehicle asset first — worth doing once here rather than assuming vehicle-only).
 - Multi-unit stacking test: one pallet stacked 3–4 high via `PointInstancer`, then baked per `export_utils.bake_all_point_instancers()` before export.
+- **Placeholder Character kit (§1.6):** one capsule-or-billboard proxy per roster runner (6 total, Module 2 §2), authored under the `Character` category (§2.1) with a single `Hardpoints/Anchor` marker — no rig, no per-runner sculpted likeness. Portrait-image texture (if using the billboard-card variant) can be a flat placeholder color/initial per runner at this stage; swapping in real portrait art later is a texture change, not a re-author.
 
 **Acceptance criteria:**
 - Every cargo container type exports a clean `.usdz` + `.glb` pair; `TieDown_01..04` hardpoints present and positioned consistently across all container variants (so a later loadout-assembly script can treat them interchangeably).
 - Stacked-pallet test asset's baked instances are visually correct in Blender (no leftover/duplicate/mispositioned geometry — the exact failure mode `usd-dcc-export` §3 warns about) and in the Babylon-loaded `.glb`.
 - Visual differentiation check in a read-only viewport (`usdview` or Blender): glass reads as distinct from steel drum reads as distinct from wood crate, using only the Phase 0 material-preset extension (no texture painting required yet).
+- All 6 placeholder character proxies export clean `.usdz`/`.glb` pairs with an `Anchor` hardpoint present; one proxy manually aligned to a stand-in `DriverSeat` position confirms the anchor-matching approach (§2.3) before Phase 3 commits to authoring it on every vehicle.
 
 ### Phase 3 — Vehicle Chassis & Suspension Rigging Engine
 **Builds on:** Phases 0–2 (cargo beds need the same hardpoint convention cargo containers already have).
@@ -210,12 +228,14 @@ Each phase is scoped to fit one focused development session and produces a concr
 - Shared kit build-out per §1.1: chassis frame builder (parametric, scalable per vehicle class), wheel assembly (steerable-front / fixed-rear per §2.2), suspension mount points, cargo bed/box variants (open/enclosed/armored/trunk/sidecar), door/hatch hinge kit, cargo latch kit, lighting/livery prop kit.
 - Assemble the 5 roster vehicles (Mule, Goat, Needle, Bastion, Wasp) from the shared kit, parameterized per Module 2 §3/§4's stated axes (Capacity → bed footprint, Durability → frame/plating thickness, Profile → size/color/conspicuousness, Terrain Traction → tire width/tread style).
 - Author `Collision/Hull_*` proxies per vehicle (§2.5) — required this phase, since Cargo Integrity's physics-signal approach (Module 1 §6.1) depends on it existing, not on render-mesh collision.
+- Author `Hardpoints/DriverSeat` and `Hardpoints/ExitPoint` on every vehicle (§1.6, §2.3) — cheap, mechanically inert today, and the specific hook that keeps the future on-foot/commandeer-a-second-vehicle direction from requiring a revisit of already-shipped vehicle assets.
 
 **Acceptance criteria:**
 - All 5 vehicles export clean `.usdz`/`.glb` pairs with `_Steer`/`_Spin`/`_Hinge`/`_Latch` pivots present and correctly parented (mesh is always a child of its pivot, per §2.2).
 - Babylon-side test: for at least one vehicle, drive `_Steer` and `_Spin` nodes from a throwaway script and confirm visually correct steering + rolling behavior (front wheels turn about a vertical axis at the wheel's own position, not the vehicle's center).
 - Each vehicle's silhouette read-check in a viewport confirms it's visually distinguishable from the others at a glance (a Bastion should not be mistakable for a Mule) — a soft but real check, since Module 2's design explicitly relies on players recognizing vehicle identity, not just stats.
 - `usdchecker` clean on every vehicle; `Collision/Hull_*` present on every vehicle.
+- `DriverSeat`/`ExitPoint` present on every vehicle at a sensible in-cab/beside-the-vehicle position; one Phase 2 placeholder character's `Anchor` aligns onto each vehicle's `DriverSeat` without per-vehicle special-casing, confirming the hardpoint-matching contract from §2.3 holds across the whole vehicle roster, not just the one vehicle it was designed against.
 
 ### Phase 4 — Environmental & Terrain Block Generator
 **Builds on:** Phase 0 (tile-snap constant, §2.6), Phase 2's prop-kit patterns (biome dressing reuses the same authoring approach).
@@ -245,6 +265,15 @@ Each phase is scoped to fit one focused development session and produces a concr
 - Pursuit/escort vehicles reuse a Phase 3 chassis file (referenced + re-materialed), not a duplicated/forked one — a structural check (grep the authoring script for a reference to the existing vehicle asset, not a fresh `make_box_mesh` chassis built from scratch).
 - The tier-5 composite test scene (Ridge Line + Pursuit) assembles with zero new asset types beyond this phase's own additions — a direct verification of Module 4 §6's reuse principle, and the clearest sign the modularity investment in Phases 0–4 paid off.
 
+### Phase 6 (Deferred, not scheduled) — Character Rigging & On-Foot Mechanics
+
+**Not part of this roadmap's committed scope.** Named here only so the reserved `Character` category (§1.6, §2.1) and the `DriverSeat`/`ExitPoint`/`Anchor` hardpoints (§2.3) authored starting in Phases 2–3 have a stated destination, rather than looking like unexplained scope creep in those earlier phases. Would cover, whenever it's actually greenlit:
+
+- Full rigged humanoid geometry (skeleton + skinning) per runner, replacing the Phase 2 placeholder proxies — a materially different pipeline problem than this roadmap's hard-surface modular kits, since it exercises skinning/animation through the Blender glTF conversion path in a way nothing in Phases 0–5 does.
+- Walk/idle/sneak locomotion and vehicle mount/dismount animation, keyed off the same `DriverSeat`/`ExitPoint`/`Anchor` hardpoint contract already in place.
+- Runtime logic (not an asset concern) for leaving a vehicle parked and unattended, on-foot stealth detection (likely reusing the Hot Zone/Profile-monitoring concept from Module 4 §3.2, extended to a walking character), and commandeering a second, unattended vehicle.
+- A design pass in `docs/game-design/` justifying and specifying this as actual mission content — Version 0 (Modules 1–4) has no on-foot objective variant today, so this phase also has no mission spec to build against yet. That design work should happen before Phase 6 is scheduled, not during it.
+
 ---
 
 ## 4. Phase Verification & Quality Criteria
@@ -266,7 +295,7 @@ Common gates every phase must clear, in addition to each phase's specific accept
 ---
 
 ## Decisions Log
-- **Runner/character 3D models excluded from this roadmap's scope** — flagged as an open scoping question for the user, not assumed. Modules 1–2 never specify runner physical appearance; the game's core session (Module 1 §5, "The Drive") implies in-vehicle POV gameplay, so runners plausibly need only 2D portrait/UI art rather than rigged humanoid meshes. Revisit if/when in-world 3D driver presence is actually required.
+- **Runner/character 3D models: placeholder now, architecture reserved for on-foot gameplay later (confirmed by producer).** Not full-detail production content in Phases 0–5 — a capsule/billboard proxy per runner is enough for now — but the producer explicitly wants the option open to have a runner act independent of their vehicle (sneak on foot, commandeer a second vehicle as a decoy/escort for the cargo vehicle), so the `Character` category, its `Anchor` hardpoint, and every vehicle's new `DriverSeat`/`ExitPoint` hardpoints are authored starting now (Phases 2–3) specifically so that later work is a content addition, not an architecture change. Full humanoid rigging itself stays deferred (see "Phase 6 (Deferred)" at the end of §3) pending an actual on-foot mission design pass, which doesn't exist yet in Version 0.
 - **Metadata channel (customData vs. sidecar JSON manifest) left as a Phase-1-validated decision, not asserted here** — the existing pipeline has only stress-tested Blender's USD *import* path (per `usd-dcc-export`), not its glTF *export* path's `extras` fidelity; Phase 1 is scoped specifically to resolve this before Phase 2+ commit to authoring gameplay metadata one way or the other.
 - **Vehicle collision hulls treated as required Phase 3 deliverables, not deferred polish** — Cargo Integrity (Module 1 §6.1) is explicitly designed to read off vehicle physics signals the engine already tracks, which makes collision geometry load-bearing for a core mechanic, not an optimization.
 
