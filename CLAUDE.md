@@ -33,3 +33,9 @@
 - **Code Style:** Strict TypeScript. Prefer clear type definitions and modular files.
 - **Frame Loops:** Never trigger React/DOM re-renders inside 60 FPS animation or physics frame loops. Use mutable refs or direct object updates.
 - **Verification:** Always run `npm run check` after modifying runtime code to ensure zero compilation or build errors.
+
+
+## Babylon.js Engine Rules
+- **Loader:** Babylon.js has no USD/usdz *import* support (only usdz *export*, added in 8.0, for iOS AR Quick Look) -- never load the pipeline's `.usdz` output directly. Load the pipeline's `.glb` output (produced by `pipeline/export_utils.py`'s `export_gltf()` via headless Blender) with `import '@babylonjs/loaders/glTF';` + the module-level `AppendSceneAsync(...)` (the `SceneLoader` class and its `.AppendAsync`/`.ImportMeshAsync` methods, and the lowercase `appendSceneAsync`, are all deprecated in favor of this PascalCase module-level function).
+- **Physics:** Havok needs its WASM module initialized before use: `const havokInstance = await HavokPhysics()` (from `@babylonjs/havok`), then `scene.enablePhysics(gravity, new HavokPlugin(true, havokInstance))`. Under Vite, a bare `HavokPhysics()` call fails ("Incorrect response MIME type") because the wasm request falls through Vite's SPA fallback -- import the wasm with `?url` (`import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url'`) and pass `HavokPhysics({ locateFile: () => havokWasmUrl })`. This requires `"types": ["vite/client"]` in `tsconfig.json` (already set) so the `?url` import typechecks.
+- **Scene Tree:** Attach interactive logic via scene component classes or custom ActionManagers.
