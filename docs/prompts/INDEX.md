@@ -383,3 +383,34 @@ prompts — e.g. Phase 1's metadata-channel outcome belongs here.)_
   `cargo_utils` constants as the Mule's; `main.ts` diff empty; `npm run
   check` passes; no stray throwaway scripts. **Approved.** All three
   Phase 3 sub-prompts (4a/4b/4c) are now approved — opening the PR next.
+
+- **2026-09-07 — Post-approval fix (PR #6, still open): collision hulls
+  z-fighting against the visible body.** Found by the user opening the
+  merged-pending Mule/Goat directly in Blender (not through the pipeline's
+  own renders, which never showed it) — the Goat's body had a mottled,
+  camo-like flicker on its rear section that turned out to be two opaque
+  surfaces occupying nearly the same space. Confirmed by direct bounding-box
+  query: the Mule's `Hull_CargoBox` was byte-for-byte identical to
+  `CargoBox`'s own bounds, and the Goat's `Hull_Chassis` substantially
+  overlapped `CabLower`/`CabGreenhouse` — a general pattern across every
+  collision hull built so far, not Goat-specific. Root cause: this
+  pipeline's collision meshes are deliberately left fully visible in
+  USD/glTF (per the `usd-vehicle-assembly` skill — hiding them is meant to
+  be a Babylon-side runtime decision that doesn't exist yet), so opening
+  the raw asset in any DCC tool renders the hull directly superimposed on
+  the body it's meant to approximate.
+  **Fix:** added `vehicle_utils.add_collision_hull` — insets every hull by
+  a small margin (`0.03m`) so it's always strictly inside the visible mesh,
+  never coincident with or larger than it, and gives it an unmistakable
+  debug color (bright magenta) so it reads as "collision proxy" rather than
+  "broken paint" when inspected directly. Both vehicles' inline
+  `make_box_mesh` hull calls replaced with this helper. Verified: rebuilt
+  both vehicles, confirmed via bounding-box query that hulls are now
+  strictly inset (not just visually), re-rendered the Goat and confirmed
+  the mottled artifact is gone entirely (replaced by a clean, obviously
+  intentional magenta volume visible through the open cab/bed, since this
+  pipeline's body panels are thin shells with no modeled interior).
+  `usdchecker` clean on both vehicles; `npm run check` passes. Committed
+  directly to `feat/phase3-vehicle-roster` (PR #6 still open, not yet
+  merged) rather than as a new prompt — a small, mechanical, well-scoped
+  fix, not an asset-quality judgment call.

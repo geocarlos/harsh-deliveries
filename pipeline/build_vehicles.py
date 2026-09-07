@@ -315,19 +315,20 @@ def build_mule():
     )
 
     # --- Collision hulls (§2.5, non-negotiable per the roadmap) -----------
-    chassis_hull = make_box_mesh(
-        stage, collision.GetPath().AppendChild("Hull_Chassis"),
+    # Inset from the visible body + an unmistakable debug color (see
+    # vehicle_utils.add_collision_hull) -- these previously matched the
+    # visible mesh exactly (the cargo box hull was byte-for-byte identical
+    # to CargoBox), which z-fights badly when the raw asset is opened
+    # directly in a DCC tool instead of through a runtime that hides them.
+    vehicle_utils.add_collision_hull(
+        stage, collision, "Chassis",
         (MULE_CAB_HALF_WIDTH, 0.5, (MULE_HOOD_FRONT_Z - cab_lower_z - cab_lower_half[2]) / 2.0 + 0.1),
+        (0, MULE_DECK_Y, (MULE_HOOD_FRONT_Z + cab_lower_z - cab_lower_half[2]) / 2.0),
     )
-    UsdGeom.Xformable(chassis_hull).AddTranslateOp().Set(
-        Gf.Vec3d(0, MULE_DECK_Y, (MULE_HOOD_FRONT_Z + cab_lower_z - cab_lower_half[2]) / 2.0)
-    )
-
-    cargo_hull = make_box_mesh(
-        stage, collision.GetPath().AppendChild("Hull_CargoBox"), MULE_CARGO_BOX_HALF,
-    )
-    UsdGeom.Xformable(cargo_hull).AddTranslateOp().Set(
-        Gf.Vec3d(0, MULE_CARGO_BOX_CENTER_Y, MULE_CARGO_BOX_CENTER_Z)
+    vehicle_utils.add_collision_hull(
+        stage, collision, "CargoBox",
+        MULE_CARGO_BOX_HALF,
+        (0, MULE_CARGO_BOX_CENTER_Y, MULE_CARGO_BOX_CENTER_Z),
     )
 
     # --- Driver seat / exit point hardpoints (§1.6, §2.3) -----------------
@@ -549,24 +550,22 @@ def build_goat():
         )
 
     # --- Collision hulls (§2.5): chassis + bed, at minimum --------------
-    chassis_hull = make_box_mesh(
-        stage, collision.GetPath().AppendChild("Hull_Chassis"),
+    # Inset + debug-colored, same reasoning as the Mule's (see
+    # vehicle_utils.add_collision_hull).
+    vehicle_utils.add_collision_hull(
+        stage, collision, "Chassis",
         (GOAT_CAB_HALF_WIDTH, 0.5, (GOAT_HOOD_FRONT_Z - GOAT_CAB_REAR_Z) / 2.0),
-    )
-    UsdGeom.Xformable(chassis_hull).AddTranslateOp().Set(
-        Gf.Vec3d(0, GOAT_DECK_Y, (GOAT_HOOD_FRONT_Z + GOAT_CAB_REAR_Z) / 2.0)
+        (0, GOAT_DECK_Y, (GOAT_HOOD_FRONT_Z + GOAT_CAB_REAR_Z) / 2.0),
     )
 
     bed_hull_bottom = GOAT_BED_FLOOR_CENTER_Y - GOAT_BED_FLOOR_HALF_Y
     bed_hull_top = GOAT_BED_FLOOR_TOP_Y + GOAT_RAIL_HEIGHT
     bed_hull_half_y = (bed_hull_top - bed_hull_bottom) / 2.0
     bed_hull_center_y = (bed_hull_top + bed_hull_bottom) / 2.0
-    bed_hull = make_box_mesh(
-        stage, collision.GetPath().AppendChild("Hull_Bed"),
+    vehicle_utils.add_collision_hull(
+        stage, collision, "Bed",
         (GOAT_BED_HALF_X, bed_hull_half_y, GOAT_BED_HALF_Z),
-    )
-    UsdGeom.Xformable(bed_hull).AddTranslateOp().Set(
-        Gf.Vec3d(0, bed_hull_center_y, GOAT_BED_CENTER_Z)
+        (0, bed_hull_center_y, GOAT_BED_CENTER_Z),
     )
 
     # --- Driver seat / exit point hardpoints (§1.6, §2.3) ---------------

@@ -412,3 +412,38 @@ def build_hull_section(stage, parent_scope, name, profile_points, half_width, po
     UsdGeom.Xformable(section).AddTranslateOp().Set(Gf.Vec3d(*position))
     set_color(section.GetPrim(), color, preset=preset)
     return section
+
+
+# --- Collision hulls (§2.5) -------------------------------------------------
+
+# Both vehicles built so far authored `Hull_*` proxies sized to exactly (in
+# the Mule cargo box's case, byte-for-byte) match the visible body mesh they
+# stand in for. That's a real bug, not a style choice: this pipeline's
+# collision meshes are deliberately left as ordinary *visible* geometry (per
+# the usd-vehicle-assembly skill -- USD/glTF visibility hints aren't reliably
+# honored downstream, so hiding them is meant to be a Babylon-side runtime
+# decision that doesn't exist yet). Until that runtime code exists, opening
+# the raw asset in any DCC tool renders the hull directly superimposed on
+# the body -- two coincident opaque surfaces fighting for the same depth,
+# which is exactly the mottled/camo z-fighting pattern a direct Blender
+# import shows. A small inset margin (so the hull is always strictly
+# *inside* the visual mesh, never coincident with or larger than it -- a
+# collision proxy smaller than the render mesh is standard practice anyway)
+# eliminates the z-fighting outright, and an unmistakable debug color makes
+# it read as "collision proxy" rather than "broken paint" in the meantime.
+COLLISION_INSET = 0.03
+COLLISION_DEBUG_COLOR = (0.9, 0.05, 0.75)
+
+
+def add_collision_hull(stage, collision_scope, name, half_extents, position, inset=COLLISION_INSET):
+    """A simplified box collision proxy under `Collision/Hull_<name>`.
+    `half_extents`/`position` describe the same volume as the visible body
+    geometry it stands in for; `inset` shrinks every half-extent by a small
+    margin so the hull never sits exactly coincident with (or larger than)
+    that visible mesh -- see the module-level comment above for why this
+    matters even though nothing reads these hulls as collision shapes yet."""
+    inset_extents = tuple(max(h - inset, 0.01) for h in half_extents)
+    hull = make_box_mesh(stage, collision_scope.GetPath().AppendChild(f"Hull_{name}"), inset_extents)
+    UsdGeom.Xformable(hull).AddTranslateOp().Set(Gf.Vec3d(*position))
+    set_color(hull.GetPrim(), COLLISION_DEBUG_COLOR, preset="unmarked-matte")
+    return hull
