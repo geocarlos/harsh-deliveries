@@ -48,12 +48,15 @@ declares each *phase* the atomic, independently-testable unit.
 |---|---|---|---|---|---|
 | 1 | [phase0-core-utils.md](phase0-core-utils.md) | Phase 0 | `feat/phase0-core-utils` | Rig/hardpoint/UV/material-preset/manifest helpers + `create_asset_stage()` scope builder | **Approved — merged (PR #3)** |
 | 2 | [phase1-pipeline-validation.md](phase1-pipeline-validation.md) | Phase 1 | `feat/phase1-pipeline-validation` | Spike test asset; full usdz+glb export round-trip; resolve customData-vs-manifest question; Babylon suffix-lookup smoke test | **Approved — merged (PR #4)** |
-| 3 | [phase2-cargo-props-characters.md](phase2-cargo-props-characters.md) | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | **Ready to run** |
-| 4 | phase3a-vehicle-kit-and-mule.md | Phase 3 (part A, addendum) | `feat/phase3-vehicle-roster` | Shared vehicle kit (chassis/wheel/suspension/hinge/latch/lighting) built and proven on one reference vehicle (the Mule), incl. Babylon steer/spin validation | Not written |
-| 5 | phase3b-remaining-vehicles.md | Phase 3 (part B, addendum) | `feat/phase3-vehicle-roster` (same branch as 4) | Goat, Needle, Bastion, Wasp assembled from the kit 3a validated | Not written |
-| 6 | phase4a-terrain-tiles-hazards.md | Phase 4 (part A, addendum) | `feat/phase4-terrain` | Road tile kit + tile-snap convention + 4 named hazard tiles + chained test route | Not written |
-| 7 | phase4b-biome-dressing-variants.md | Phase 4 (part B, addendum) | `feat/phase4-terrain` (same branch as 6) | Biome dressing kits (neutral/mountain/swamp/dockside) + calmed/militarized `UsdVariantSets` + per-tile gameplay tags | Not written |
-| 8 | phase5-advanced-hazards-integration.md | Phase 5 | `feat/phase5-advanced-hazards` | Checkpoint, pursuit/escort chassis-reuse liveries, ambush/hot-zone props, tier-5 composite integration test | Not written |
+| 3 | [phase2-cargo-props-characters.md](phase2-cargo-props-characters.md) | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | **Approved — merged (PR #5)** |
+| 4 | ~~[phase3a-vehicle-kit-and-mule.md](phase3a-vehicle-kit-and-mule.md)~~ | Phase 3 | `feat/phase3-vehicle-roster` | **Superseded, not run to completion as-is** — box-only kit read as "a poorly designed toy" on review; replaced by the profile-extrusion + referenced-parts plan below (rows 4a-4c) | Superseded |
+| 4a | [phase3a-shared-vehicle-kit.md](phase3a-shared-vehicle-kit.md) | Phase 3 (part A, revised) | `feat/phase3-vehicle-roster` | Shared/customizable kit: profile-extrusion + frustum geometry helpers, a referenceable wheel-corner sub-asset generator, detail/greeble kit | **Approved** |
+| 4b | phase3b-mule.md | Phase 3 (part B, revised) | `feat/phase3-vehicle-roster` (same branch) | The Mule assembled from 4a's kit: profile-extruded hull, referenced wheel corners, cargo box, details, hardpoints, collision, rigging | Not written — depends on 4a |
+| 4c | phase3c-goat-reuse-proof.md | Phase 3 (part C, revised) | `feat/phase3-vehicle-roster` (same branch) | The Goat assembled from the *same* kit with different parameters (pickup proportions, open bed, off-road tires, long-travel suspension) — the explicit proof that 4a's kit is genuinely reusable, not Mule-specific | Not written — depends on 4b |
+| 4d+ | TBD | Phase 3 (remainder) | TBD | Needle, Bastion (likely mostly kit reuse per 4c's proof) and the Wasp (motorcycle — expected to need its own bespoke pipeline, not this kit) | Not written — planned after 4c's proof lands |
+| 5 | phase4a-terrain-tiles-hazards.md | Phase 4 (part A, addendum) | `feat/phase4-terrain` | Road tile kit + tile-snap convention + 4 named hazard tiles + chained test route | Not written |
+| 6 | phase4b-biome-dressing-variants.md | Phase 4 (part B, addendum) | `feat/phase4-terrain` (same branch as 5) | Biome dressing kits (neutral/mountain/swamp/dockside) + calmed/militarized `UsdVariantSets` + per-tile gameplay tags | Not written |
+| 7 | phase5-advanced-hazards-integration.md | Phase 5 | `feat/phase5-advanced-hazards` | Checkpoint, pursuit/escort chassis-reuse liveries, ambush/hot-zone props, tier-5 composite integration test | Not written |
 
 Phase 6 (character rigging / on-foot mechanics) stays deferred per the
 roadmap — no prompt until a design pass greenlights it.
@@ -148,3 +151,73 @@ prompts — e.g. Phase 1's metadata-channel outcome belongs here.)_
   check` passes. Both throwaway validation scripts (stacking test,
   anchor-alignment test) were removed, not committed. Shipped on
   `feat/phase2-cargo-props-characters`.
+
+- **2026-09-07 — Phase 3a (`phase3a-vehicle-kit-and-mule.md`): rejected,
+  redesigned rather than patched.** The executing session's Mule was built
+  entirely from axis-aligned boxes/cylinders (chassis as one full-length
+  flat slab, cargo box as a plain shoebox, wheels as bare 16-sided
+  cylinders) — reviewed by rendering it headlessly via Blender (not just
+  reading the code) and independently confirmed it read as "a poorly
+  designed toy," matching the user's own reaction from viewing it directly.
+  Rather than iterate on that draft, prototyped three revisions directly
+  (v2/v3/v4, outside the phase-prompt workflow, purely to validate a
+  direction before committing a new prompt to it) using only the *existing*
+  primitive helpers composed with real vehicle anatomy — hood, cab,
+  windshield/side glass, wheel-arch flares, bumpers, two-tone rocker,
+  rim+tire wheel split — landing on v4 as "pleasant, stylized low-poly,"
+  after v3 introduced and then fixed a real regression (oversized side-glass
+  panels reading as solid wall panels). The user then pointed at a separate
+  reference project, `modular-tank-learning-project` (a prior session's
+  OpenUSD tank build), as the target quality/architecture bar. Reading its
+  six generator scripts end-to-end (and rendering its output, not just
+  reading code) surfaced two techniques our vehicle kit was missing:
+  **profile-extrusion** for sloped panels (the tank's hull is a 5-point
+  polygon extruded across width, not a box — this is what a real glacis
+  plate needs, and what our Mule's hood/roofline should use instead of flat
+  boxes) and a **real USD-referenced compositional pipeline** (leaf parts
+  as their own `.usda` files, referenced with transform/variant overrides
+  into an assembly, rigging and motion kept as separate layers on top) in
+  place of one flat inline-authored stage per asset. One point the other
+  direction: that project's own `PointInstancer`-baking export script
+  doesn't deactivate its copied template prim — the same leftover-geometry
+  bug this project's Phase 2 review already caught and fixed in our own
+  `export_utils.py` — so our export-safety plumbing isn't behind.
+  **Decision:** redo Phase 3 as three prompts instead of two —
+  `phase3a-shared-vehicle-kit.md` (profile-extrusion/frustum helpers, a
+  referenceable wheel-corner sub-asset, detail kit), `phase3b-mule.md` (the
+  Mule assembled from that kit), `phase3c-goat-reuse-proof.md` (the Goat,
+  same kit, different parameters — chosen over Bastion/Needle specifically
+  to stress-test genericity, since it diverges further from the Mule's
+  anatomy; the Wasp motorcycle is expected to need its own bespoke pipeline
+  regardless and isn't a fair reuse test). Per the user's explicit
+  trade-off: prioritize realism/detail over speed here. The old prompt file
+  is kept, marked superseded, not deleted, per this log's own convention.
+
+- **2026-09-07 — Phase 3a-revised (`phase3a-shared-vehicle-kit.md`):
+  Approved, no changes requested.** Independently re-verified rather than
+  trusting the report: rebuilt both a front (`steerable=True`) and rear
+  wheel-corner asset directly, confirmed `usdchecker` clean on both and
+  `usdtree` shows the exact expected pivot chains (`Wheel_Steer` ->
+  `Wheel_Spin` for the front corner, bare `Wheel_Spin` for the rear — no
+  `_Steer` parent). Rebuilt every Phase 2 asset (cargo/props/characters)
+  after the `make_cylinder_mesh` refactor (now a thin wrapper over the new
+  `make_frustum_mesh`) and ran `usdchecker` across every exported `.usdz` in
+  `public/assets/models/` — all clean, confirming the refactor didn't
+  regress existing callers. Looked at the session's own validation renders
+  (`pipeline/.build/_review/phase3a_validate_a.png`/`_b.png`,
+  `phase3a_detail_check*.png`) rather than trusting a text report: the
+  curved wheel-arch flare (`make_profile_extrusion`, an annular-sector
+  cross-section) reads convincingly on all four mirrored corners, the test
+  frustum tapers correctly (not inside-out), the test profile-extruded
+  wedge fills and shades correctly, and the window band from
+  `build_window_band` is now a modest proportionate strip — the exact
+  mistake (an oversized glass panel reading as a solid wall) from the
+  earlier v3 prototype does not recur. `npm run check` passes. No leftover
+  throwaway validation script (confirmed via search — only its `.usda`/`.png`
+  outputs remain, gitignored). One stale `vehicle_Mule.usda`/`vehicle_mule.glb`
+  found in `.build`/`public/assets/models` predates this session (leftover
+  from the discarded first Phase 3a attempt) — noted, not a defect in this
+  session's work, harmless since gitignored. Shipped on
+  `feat/phase3-vehicle-roster` (first of three commits on this shared
+  branch — Phase 3's branch/PR policy differs from earlier phases: one PR
+  once 3a+3b+3c are all approved, not per prompt).
