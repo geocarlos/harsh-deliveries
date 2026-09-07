@@ -10,6 +10,8 @@ usdview/Hydra:
   every consumer.
 """
 import math
+import re
+from pathlib import Path
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade, Vt
 
@@ -63,6 +65,32 @@ def create_asset_stage(file_path, category, name):
         for scope_name in _ASSET_SCOPE_NAMES
     }
     return stage, scopes
+
+
+_CAMEL_BOUNDARY_RE = (re.compile(r"(.)([A-Z][a-z]+)"), re.compile(r"([a-z0-9])([A-Z])"))
+
+
+def asset_slug(category, name):
+    """`<category_lower>_<name_snake>` output-naming convention (roadmap
+    Phase 2 Task 0), e.g. asset_slug("Cargo", "WoodCrate") ->
+    "cargo_wood_crate". `name` is the CamelCase asset name only (no
+    category prefix) -- the same string passed as `create_asset_stage`'s
+    `name` argument."""
+    snake = name
+    for pattern in _CAMEL_BOUNDARY_RE:
+        snake = pattern.sub(r"\1_\2", snake)
+    return f"{category.lower()}_{snake.lower()}"
+
+
+def asset_output_paths(models_dir, category, name):
+    """(usdz_path, glb_path) for `<category>_<name>` under `models_dir`, per
+    Task 0's naming convention -- e.g. asset_output_paths(MODELS_DIR,
+    "Cargo", "WoodCrate") -> (.../cargo_wood_crate.usdz, .../cargo_wood_crate.glb).
+    Shared here (rather than re-derived per build script) since every phase
+    from Phase 2 on needs it for several distinct named output assets."""
+    slug = asset_slug(category, name)
+    models_dir = Path(models_dir)
+    return models_dir / f"{slug}.usdz", models_dir / f"{slug}.glb"
 
 
 def compute_flat_face_normals(points, face_vertex_counts, face_vertex_indices):
@@ -214,7 +242,20 @@ def get_material(stage, color, preset=None):
     are unaffected."""
     if preset is not None and preset not in _MATERIAL_PRESETS:
         raise ValueError(f"Invalid material preset {preset!r}; must be one of {tuple(_MATERIAL_PRESETS)}")
-    key = (id(stage), color, preset)
+    # Keyed by the root layer's identifier, not id(stage): a build script
+    # that authors several assets per process (every script from Phase 2 on)
+    # creates and discards one Usd.Stage per asset, and CPython is free to
+    # reuse a garbage-collected stage's id() for the next one -- confirmed
+    # reproducible (id(stage) collided on every single iteration of a tight
+    # create/discard loop in this environment). Left keyed by id(stage), a
+    # later asset's material binding would silently resolve to a dangling
+    # relationship target -- a *different*, already-flattened stage's
+    # material path that doesn't exist under this asset's own default prim.
+    # usdchecker's schema-level rules don't flag this (a relationship
+    # pointing at a nonexistent prim path isn't itself a schema violation);
+    # it only surfaced by inspecting each exported container's
+    # MaterialBindingAPI relationship targets directly.
+    key = (stage.GetRootLayer().identifier, color, preset)
     if key not in _material_cache:
         suffix = f"_{preset.replace('-', '_')}" if preset else ""
         name = "Mat_{:02x}{:02x}{:02x}{}".format(*(round(c * 255) for c in color), suffix)

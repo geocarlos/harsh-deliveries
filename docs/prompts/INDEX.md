@@ -17,9 +17,9 @@ captures *why* an asset batch was scoped the way it was, which the resulting
 code alone can't tell a future reader. Addenda go in the same file, appended,
 never rewriting history in place (same rule the roadmap holds itself to).
 
-Only Phase 0's prompt is written in full right now. Later phases are outlined
-below and get fully drafted just-in-time — several (Phase 2 onward) depend on
-Phase 1's customData-vs-manifest finding, which doesn't exist yet.
+Phases 0–2 are drafted; Phase 3 onward get fully drafted just-in-time, since
+their prompts should reflect whatever conventions the immediately-preceding
+phase actually landed on (see each phase's Review Log entry for those).
 
 ## Branching & merging
 
@@ -47,8 +47,8 @@ declares each *phase* the atomic, independently-testable unit.
 | # | File | Roadmap phase | Branch | Scope | Status |
 |---|---|---|---|---|---|
 | 1 | [phase0-core-utils.md](phase0-core-utils.md) | Phase 0 | `feat/phase0-core-utils` | Rig/hardpoint/UV/material-preset/manifest helpers + `create_asset_stage()` scope builder | **Approved — merged (PR #3)** |
-| 2 | [phase1-pipeline-validation.md](phase1-pipeline-validation.md) | Phase 1 | `feat/phase1-pipeline-validation` | Spike test asset; full usdz+glb export round-trip; resolve customData-vs-manifest question; Babylon suffix-lookup smoke test | **Approved — PR open** |
-| 3 | phase2-cargo-props-characters.md | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | Not written — metadata decision now resolved (sidecar manifest required), unblocked |
+| 2 | [phase1-pipeline-validation.md](phase1-pipeline-validation.md) | Phase 1 | `feat/phase1-pipeline-validation` | Spike test asset; full usdz+glb export round-trip; resolve customData-vs-manifest question; Babylon suffix-lookup smoke test | **Approved — merged (PR #4)** |
+| 3 | [phase2-cargo-props-characters.md](phase2-cargo-props-characters.md) | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | **Ready to run** |
 | 4 | phase3a-vehicle-kit-and-mule.md | Phase 3 (part A, addendum) | `feat/phase3-vehicle-roster` | Shared vehicle kit (chassis/wheel/suspension/hinge/latch/lighting) built and proven on one reference vehicle (the Mule), incl. Babylon steer/spin validation | Not written |
 | 5 | phase3b-remaining-vehicles.md | Phase 3 (part B, addendum) | `feat/phase3-vehicle-roster` (same branch as 4) | Goat, Needle, Bastion, Wasp assembled from the kit 3a validated | Not written |
 | 6 | phase4a-terrain-tiles-hazards.md | Phase 4 (part A, addendum) | `feat/phase4-terrain` | Road tile kit + tile-snap convention + 4 named hazard tiles + chained test route | Not written |
@@ -107,3 +107,44 @@ prompts — e.g. Phase 1's metadata-channel outcome belongs here.)_
   flagging and fixing it now rather than deferring. `main.ts`'s temporary
   test snippet and the throwaway `pipeline/phase1_test_asset.py` were both
   cleanly removed. Shipped on `feat/phase1-pipeline-validation`.
+
+- **2026-09-07 — Phase 2 (`phase2-cargo-props-characters.md`): Approved,
+  one comment corrected, no functional changes requested.** Independently
+  reran `pipeline/build_cargo.py` and confirmed all 5 containers export
+  clean (`usdchecker` `Success` on every `.usdz`) with visually distinct
+  materials (wood: plain color, glass: `glass-preview`, steel/machine-parts/
+  drum: `steel`, sealed: `unmarked-matte`). Reproduced and independently
+  verified two real shared-pipeline bugs the session found and fixed beyond
+  this prompt's literal scope, both good calls to fix now rather than defer:
+  - `get_material`'s cache was keyed by `id(stage)`; a build script that
+    creates and discards one `Usd.Stage` per asset (every script from this
+    phase on) hits CPython reusing a freed stage's `id()` for the next one.
+    Confirmed reproducible directly (`id()` collided on every iteration of
+    a tight create/discard loop). Fixed by keying on
+    `stage.GetRootLayer().identifier` instead; independently confirmed
+    every container's `MaterialBindingAPI` relationship target resolves to
+    a real prim under its own default prim post-fix. Corrected one inline
+    comment that cited `usdchecker`'s `MaterialBindingCollectionValidator`
+    as having caught this — that validator is about `UsdCollectionAPI`-based
+    bindings, unrelated; it wouldn't have flagged a dangling direct-binding
+    relationship. The bug and fix themselves were correct, just that one
+    citation wasn't — corrected in place rather than bouncing back for a
+    documentation-only fix.
+  - `bake_point_instancer` never deactivated the baked template copy or the
+    external-reference prototype prim itself, only the instancer — leaving
+    live, untransformed duplicates at the origin. Reproduced the stacking
+    test independently (4 crates referencing an exported cargo container as
+    an external-reference `PointInstancer` prototype): confirmed the
+    flattened, exported output contains only the 4 baked instances and
+    nothing else — no leftover prototype, template, or instancer prim
+    survives flatten once deactivated.
+  Anchor-alignment reasoning double-checked by inspection rather than
+  re-running a script: `Anchor` sits at local origin `(0,0,0)` on every
+  character, so aligning to a `DriverSeat` is pure translation of the
+  character's own root — no per-character offset math needed, confirming
+  the contract holds trivially. All 6 character placeholders (capsule via
+  `make_cylinder_mesh`, no dedicated capsule-mesh helper needed) export
+  clean with a distinct color and an `Anchor` hardpoint each. `npm run
+  check` passes. Both throwaway validation scripts (stacking test,
+  anchor-alignment test) were removed, not committed. Shipped on
+  `feat/phase2-cargo-props-characters`.
