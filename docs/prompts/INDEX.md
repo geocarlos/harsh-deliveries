@@ -51,7 +51,7 @@ declares each *phase* the atomic, independently-testable unit.
 | 3 | [phase2-cargo-props-characters.md](phase2-cargo-props-characters.md) | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | **Approved — merged (PR #5)** |
 | 4 | ~~[phase3a-vehicle-kit-and-mule.md](phase3a-vehicle-kit-and-mule.md)~~ | Phase 3 | `feat/phase3-vehicle-roster` | **Superseded, not run to completion as-is** — box-only kit read as "a poorly designed toy" on review; replaced by the profile-extrusion + referenced-parts plan below (rows 4a-4c) | Superseded |
 | 4a | [phase3a-shared-vehicle-kit.md](phase3a-shared-vehicle-kit.md) | Phase 3 (part A, revised) | `feat/phase3-vehicle-roster` | Shared/customizable kit: profile-extrusion + frustum geometry helpers, a referenceable wheel-corner sub-asset generator, detail/greeble kit | **Approved** |
-| 4b | phase3b-mule.md | Phase 3 (part B, revised) | `feat/phase3-vehicle-roster` (same branch) | The Mule assembled from 4a's kit: profile-extruded hull, referenced wheel corners, cargo box, details, hardpoints, collision, rigging | Not written — depends on 4a |
+| 4b | [phase3b-mule.md](phase3b-mule.md) | Phase 3 (part B, revised) | `feat/phase3-vehicle-roster` (same branch) | The Mule assembled from 4a's kit: profile-extruded hood/windshield, referenced wheel corners, cargo box, details, hardpoints, collision, door-hinge/cargo-latch kit additions | **Approved** (after two Round 2 fixes) |
 | 4c | phase3c-goat-reuse-proof.md | Phase 3 (part C, revised) | `feat/phase3-vehicle-roster` (same branch) | The Goat assembled from the *same* kit with different parameters (pickup proportions, open bed, off-road tires, long-travel suspension) — the explicit proof that 4a's kit is genuinely reusable, not Mule-specific | Not written — depends on 4b |
 | 4d+ | TBD | Phase 3 (remainder) | TBD | Needle, Bastion (likely mostly kit reuse per 4c's proof) and the Wasp (motorcycle — expected to need its own bespoke pipeline, not this kit) | Not written — planned after 4c's proof lands |
 | 5 | phase4a-terrain-tiles-hazards.md | Phase 4 (part A, addendum) | `feat/phase4-terrain` | Road tile kit + tile-snap convention + 4 named hazard tiles + chained test route | Not written |
@@ -221,3 +221,125 @@ prompts — e.g. Phase 1's metadata-channel outcome belongs here.)_
   `feat/phase3-vehicle-roster` (first of three commits on this shared
   branch — Phase 3's branch/PR policy differs from earlier phases: one PR
   once 3a+3b+3c are all approved, not per prompt).
+
+- **2026-09-07 — Phase 3b (`phase3b-mule.md`): Round 2 requested, not yet
+  approved.** Independently verified rather than trusting the report.
+  Confirmed a second real shared-pipeline bug, found and fixed by this
+  session and re-verified by reproducing both sides myself: Blender's flat
+  object namespace auto-deduplicates repeated pivot names (every wheel
+  corner referenced twice authors identical leaf names like `Wheel_Spin`)
+  by appending `.001`/`.002`/... *after* the name, silently breaking the
+  `name.endsWith('_Spin')` suffix convention for every occurrence but the
+  first. Reproduced pre-fix: only 1 of 4 `_Spin` and 1 of 2 `_Steer` nodes
+  survived with a usable suffix. Confirmed the fix
+  (`pipeline/blender_usd_to_gltf.py` now moves Blender's dedup tag to
+  *before* the suffix) resolves it — all 4/2 nodes correct post-fix. Also
+  confirmed: `usdchecker` clean, top-level scope skeleton correctly
+  preserved despite nested wheel-corner references, `TieDown_01..04`
+  numerically match `cargo_utils`' constants exactly, collision
+  hulls/hardpoints/door-hinge/cargo-latch all present and correctly
+  structured.
+  **However**, looking at the session's own render images (multiple
+  Blender angles *and* an actual in-engine Babylon screenshot) surfaced a
+  real visual flaw the text-level checks didn't catch: a distracting
+  ledge/shoulder where `CabGreenhouse` meets `CargoBox`. Confirmed via a
+  direct world-space extent query that this is *not* the roofline-height
+  mismatch it might look like (both tops sit at exactly `Y=2.35`, genuinely
+  flush) but a **width** mismatch — the cargo box (`0.93` half-width) is
+  wider than the greenhouse it meets (`0.78`) — contradicting the build
+  script's own stated intent ("one continuous panel, no separate bridging
+  trim") and reading worse at that seam than the discarded
+  `mule_v4_prototype.png`. Requested a Round 2 fix (appended to
+  `phase3b-mule.md`) rather than rejecting the whole phase — everything
+  else here is solid. Left uncommitted per this log's own convention (a
+  rejected round stays uncommitted, nothing to unwind).
+
+  **Addendum, same day — a second Round 2 fix, found by the user viewing a
+  wheel-corner asset directly in their own USD viewer:** the standalone
+  `vehicle_mulefrontcorner.usda` (and the generic Phase 3a test corners,
+  same code) is unrecognizable in isolation — "without the name, I'd have
+  no idea what I'm looking at." Confirmed via direct `GetExtentAttr()`
+  query, not just the visual complaint: the `Rim` mesh (local X span
+  `[-0.077, 0.077]`, radius `0.22`) sits entirely *inside* the `Tire` mesh's
+  solid volume (X span `[-0.11, 0.11]`, radius `0.36`) on every axis —
+  completely hidden, contributing no visible geometry from any angle. The
+  wheel-arch flare's default `arch_span_degrees=220` compounds it, wrapping
+  most of the wheel's circumference rather than the top arch a real fender
+  covers. Together: the one part meant to make this instantly readable as
+  "a wheel" (the rim) is invisible, and the fender shell dominates the
+  silhouette instead. Added as a second required fix to `phase3b-mule.md`'s
+  Round 2 (rim offset to the tire's outboard face; arch span reduced to
+  ~140-160°; re-verify by rendering a standalone wheel corner in isolation,
+  the exact scenario that surfaced this) — same shared kit file every
+  future vehicle calls, worth fixing before it propagates further.
+
+- **2026-09-07 — Phase 3b (`phase3b-mule.md`): Round 2's two fixes applied
+  and re-verified by rendering, not just re-reading the code.**
+
+  **Cab/cargo-box seam:** `CabGreenhouse`'s half-width in
+  `pipeline/build_vehicles.py` changed from `0.78` to
+  `MULE_CARGO_BOX_HALF[0]` (`0.93`), matching the cargo box exactly instead
+  of narrowing to it — the simpler of Round 2's two suggested options,
+  taken because a flat match rendered clean (see below), so the more
+  involved tapered-transition alternative wasn't needed. Rebuilt and
+  rendered from several angles, including close 3/4 exterior shots aimed
+  directly at the greenhouse/cargo-box top-side corner (the exact spot the
+  original ledge was found); the corner now reads as one continuous flush
+  panel with no poking-out step, confirmed against the pre-fix
+  `mule_v5_final_a.png` side by side. `CabLower`'s own narrower width was
+  left untouched per the prompt's own guidance, and didn't interact badly
+  with the widened greenhouse.
+
+  **Wheel-corner rim/arch:** in `pipeline/vehicle_utils.py`'s
+  `build_wheel_corner`, `arch_span_degrees`'s default dropped from `220.0`
+  to `150.0`. The rim fix deviates from the prompt's literal wording (an
+  offset toward the tire's outboard face): since the SAME wheel-corner
+  asset is referenced un-mirrored at both the +X and -X wheel positions
+  (Task 4's own mirror-symmetric design), any offset toward one local-X
+  side is only correct for one of the two referenced positions — at the
+  other, that same local direction is the *inboard* face, occluded by the
+  tire itself from the natural outward viewing angle, silently
+  reintroducing the exact "wheel with no visible rim" bug on two of four
+  wheels. Instead, added a new `rim_proud=0.02` parameter and sized the
+  rim's own axial extent to `tire_width + 2 * rim_proud`, kept centered —
+  the rim now protrudes symmetrically past both of the tire's flat faces,
+  so it's visible regardless of which side ends up outboard when
+  referenced. Re-verified by rendering `vehicle_mulefrontcorner.usda`
+  alone from four angles (covering both local +X- and -X-facing views): the
+  rim now shows clearly as a distinct lighter disc proud of the tire's
+  face in every shot, and the fender arch reads as a partial cap over the
+  wheel's top rather than a shell encasing it — both confirmed against the
+  pre-fix `mule_v5_final_a.png`, where the wheel is a featureless black
+  disc with an over-wide fender wrap.
+
+  **Full-vehicle regression:** rebuilt the whole roster
+  (`build_vehicles.py`), `usdchecker` clean on the Mule and both wheel-
+  corner `.usdz` packages. Loaded `vehicle_mule.glb` in Babylon (temporary
+  validation code in `main.ts`, removed before finishing, per this
+  project's own throwaway-code convention): the multi-node suffix lookup
+  (`name.endsWith('_Spin')` / `'_Steer'`) found all 4 `_Spin` and both
+  `_Steer` nodes with correctly-deduped names (`Wheel_Spin`,
+  `Wheel_001_Spin`, `Wheel_002_Spin`, `Wheel_003_Spin`; `Wheel_Steer`,
+  `Wheel_001_Steer`) — confirming Round 2's first fix (the Blender
+  namespace-dedup rename) still holds after this round's geometry changes.
+  Sampled each pivot's rotation at two points in time and confirmed all six
+  are actually turning, not just present. No console errors (aside from an
+  expected headless-Chromium/software-rendering WebGL context-loss/restore
+  cycle, unrelated to the asset). `npm run check` passes.
+
+  New renders saved under `pipeline/.build/_review/` (standalone corner:
+  `corner_0..3.png`; full Mule: `mule_0..3.png`; seam close-ups:
+  `seam_3q_L.png`, `seam_3q_R.png`, `seam_side_R.png`; in-engine Babylon
+  screenshot: `mule_babylon_screenshot_v2.png`).
+
+  **Independently re-verified, not just read:** rebuilt the roster myself
+  and confirmed via direct `GetExtentAttr()` queries — `Rim` now spans
+  local X `[-0.13, 0.13]` vs. `Tire`'s `[-0.11, 0.11]` (protrudes 0.02 past
+  both faces, as designed), and `CabGreenhouse`/`CargoBox` both span world
+  X `[-0.93, 0.93]` with matching Y tops (flush, no mismatch). Rendered the
+  standalone front corner and the full Mule myself (fresh renders, not the
+  session's own) — the corner unambiguously reads as a wheel with a fender
+  now, and the cab/cargo-box seam is a single continuous panel. `usdchecker`
+  clean, `npm run check` passes, `main.ts` diff empty, no stray throwaway
+  scripts. **Approved.** Committing to `feat/phase3-vehicle-roster` now (no
+  PR yet — Phase 3's policy is one PR once 4a+4b+4c all land).

@@ -1,9 +1,10 @@
 """Shared, customizable vehicle kit (asset-roadmap.md §1.1; phase3a-shared-
 vehicle-kit prompt): a referenceable wheel-corner sub-assembly generator
-(Task 2), a detail/greeble kit (Task 3), and a hull/cab composition helper
-built on `usd_utils.make_profile_extrusion` (Task 4). Nothing here assembles
-a full vehicle -- that's Phase 3b (the Mule) and Phase 3c (the Goat), each
-calling these same functions with their own parameters.
+(Task 2), a detail/greeble kit (Task 3), a hull/cab composition helper built
+on `usd_utils.make_profile_extrusion` (Task 4), and door-hinge/cargo-latch
+rig helpers (phase3b-mule prompt, Task 1). Nothing here assembles a full
+vehicle -- that's Phase 3b (the Mule) and Phase 3c (the Goat), each calling
+these same functions with their own parameters.
 """
 import math
 from pathlib import Path
@@ -58,8 +59,9 @@ def build_wheel_corner(
     build_dir, models_dir, name, *,
     tire_radius, tire_width, rim_radius,
     steerable,
-    arch_gap=0.06, arch_thickness=0.04, arch_span_degrees=220.0, arch_segments=10,
+    arch_gap=0.06, arch_thickness=0.04, arch_span_degrees=150.0, arch_segments=10,
     strut_length=0.35, strut_radius=0.035,
+    rim_proud=0.02,
     tire_color=(0.04, 0.04, 0.04), tire_preset="rubber",
     rim_color=(0.62, 0.62, 0.65), rim_preset="steel",
     arch_color=(0.16, 0.17, 0.18), arch_preset="paint",
@@ -72,6 +74,16 @@ def build_wheel_corner(
     plain translate override -- no rotation, no mirroring (this prompt's
     Task 2 mirror-symmetric design constraint; a mirror flips face winding/
     normal direction, a rotation doesn't).
+
+    Because the SAME local geometry is referenced un-mirrored at both +X
+    and -X wheel positions, the rim can't be offset toward one local-X
+    side only (Round 2 second-fix's literal "toward the outboard face"
+    framing) -- whichever local side is outboard at one wheel position is
+    inboard (and occluded by the tire itself, from the natural outward
+    viewing angle) at the other. Instead `rim_proud` makes the rim's own
+    axial extent exceed the tire's width, symmetrically, so it protrudes
+    past BOTH of the tire's flat faces by that amount -- visible from
+    either side regardless of which one ends up outboard when referenced.
 
     `steerable=True` authors a `_Steer` (rotateY) pivot parenting a `_Spin`
     (rotateX) pivot (front corner); `steerable=False` authors a bare
@@ -110,7 +122,7 @@ def build_wheel_corner(
     rim = make_frustum_mesh(
         stage, spin_pivot.GetPath().AppendChild("Rim"),
         bottom_radius=rim_radius * 0.85, top_radius=rim_radius,
-        height=tire_width * 0.7, axis="X", sides=12,
+        height=tire_width + 2 * rim_proud, axis="X", sides=12,
     )
     set_color(rim.GetPrim(), rim_color, preset=rim_preset)
 
@@ -134,6 +146,70 @@ def build_wheel_corner(
     export_gltf(stage, glb_path)
     print(f"Exported {usdz_path.name}, {glb_path.name}")
     return stage, build_path
+
+
+# --- Task 1 (phase3b): door hinge + cargo latch rig helpers --------------
+
+def add_door_hinge(stage, rig_scope, name, hinge_position, door_size, *,
+                    door_color=(0.5, 0.5, 0.55), door_preset="paint"):
+    """A `_Hinge` pivot (rotateY) + door panel mesh, hung from its hinge
+    edge -- the panel is offset by half its swing width (`door_size[0]`)
+    from the pivot along local X, so the door's FAR edge swings when the
+    pivot rotates, not its hinge edge (the classic mistake would be
+    centering the panel on the pivot, which swings the door through its
+    own hinge line). `hinge_position` is the hinge edge's mount point in
+    `rig_scope`'s space -- for a side-hinged barn-style door, that's an
+    outer corner of the opening -- and the sign of its X component picks
+    which side the door is mounted on. Unlike `build_mirror` (whose rest
+    pose always points outward, the only sensible default for a mirror),
+    the door panel is offset back TOWARD the centerline by default, so a
+    pair of doors called at the opening's two outer corners renders CLOSED
+    (meeting at X=0) at rest -- the believable default for a review render
+    -- and swings outward when the pivot is later rotated open.
+
+    `door_size` is (width, height, thickness) -- `width` is the swing
+    dimension (local X), matching a real hinged door panel.
+
+    Returns (hinge_pivot_prim, door_mesh) -- caller (Task 5, or a future
+    vehicle script) poses the pivot open via
+    `rig_utils.set_pivot_rotation(hinge, "Y", degrees)`, or leaves it at
+    rest for the Babylon runtime to drive at play time.
+    """
+    width, height, thickness = door_size
+    side = 1.0 if hinge_position[0] >= 0 else -1.0
+
+    hinge = add_pivot_xform(rig_scope, name, "_Hinge", translate=hinge_position)
+    door = make_box_mesh(
+        stage, hinge.GetPath().AppendChild(f"{name}Door"),
+        (width / 2.0, height / 2.0, thickness / 2.0),
+    )
+    UsdGeom.Xformable(door).AddTranslateOp().Set(Gf.Vec3d(-side * width / 2.0, 0, 0))
+    set_color(door.GetPrim(), door_color, preset=door_preset)
+    return hinge, door
+
+
+def add_cargo_latch(stage, rig_scope, name, latch_position, *,
+                     latch_size=(0.05, 0.09, 0.03),
+                     latch_color=(0.14, 0.14, 0.15), latch_preset="steel"):
+    """A `_Latch` pivot (rotateX) + small latch-bar mesh, for the "latching
+    cargo bay locks" CLAUDE.md calls out -- deliberately `_Latch`, not
+    `_Hinge`: a door hinge carries a large panel through a wide swing (its
+    far edge moves a lot), while a latch is a small bar that flips in place
+    over the seam it's securing, so the mesh sits at the pivot's own origin
+    rather than being offset outward like a door panel.
+
+    `latch_position` is the pivot's mount point (typically straddling a
+    cargo bay's door seam) in `rig_scope`'s space; `latch_size` is
+    (width, height, thickness) of the latch bar itself.
+    """
+    lw, lh, lt = latch_size
+    latch = add_pivot_xform(rig_scope, name, "_Latch", translate=latch_position)
+    bar = make_box_mesh(
+        stage, latch.GetPath().AppendChild(f"{name}Bar"),
+        (lw / 2.0, lh / 2.0, lt / 2.0),
+    )
+    set_color(bar.GetPrim(), latch_color, preset=latch_preset)
+    return latch, bar
 
 
 # --- Task 3: detail/greeble kit -------------------------------------------
