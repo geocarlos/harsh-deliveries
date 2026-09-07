@@ -46,9 +46,9 @@ declares each *phase* the atomic, independently-testable unit.
 
 | # | File | Roadmap phase | Branch | Scope | Status |
 |---|---|---|---|---|---|
-| 1 | [phase0-core-utils.md](phase0-core-utils.md) | Phase 0 | `feat/phase0-core-utils` | Rig/hardpoint/UV/material-preset/manifest helpers + `create_asset_stage()` scope builder | **Approved — PR open** |
-| 2 | phase1-pipeline-validation.md | Phase 1 | `feat/phase1-pipeline-validation` | Spike test asset; full usdz+glb export round-trip; resolve customData-vs-manifest question; Babylon suffix-lookup smoke test | Not written — depends on 1 |
-| 3 | phase2-cargo-props-characters.md | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | Not written — depends on 2's metadata decision |
+| 1 | [phase0-core-utils.md](phase0-core-utils.md) | Phase 0 | `feat/phase0-core-utils` | Rig/hardpoint/UV/material-preset/manifest helpers + `create_asset_stage()` scope builder | **Approved — merged (PR #3)** |
+| 2 | [phase1-pipeline-validation.md](phase1-pipeline-validation.md) | Phase 1 | `feat/phase1-pipeline-validation` | Spike test asset; full usdz+glb export round-trip; resolve customData-vs-manifest question; Babylon suffix-lookup smoke test | **Approved — PR open** |
+| 3 | phase2-cargo-props-characters.md | Phase 2 | `feat/phase2-cargo-props-characters` | Cargo container kit (5 variants), prop kit, stacked-pallet bake test, 6 placeholder Character proxies | Not written — metadata decision now resolved (sidecar manifest required), unblocked |
 | 4 | phase3a-vehicle-kit-and-mule.md | Phase 3 (part A, addendum) | `feat/phase3-vehicle-roster` | Shared vehicle kit (chassis/wheel/suspension/hinge/latch/lighting) built and proven on one reference vehicle (the Mule), incl. Babylon steer/spin validation | Not written |
 | 5 | phase3b-remaining-vehicles.md | Phase 3 (part B, addendum) | `feat/phase3-vehicle-roster` (same branch as 4) | Goat, Needle, Bastion, Wasp assembled from the kit 3a validated | Not written |
 | 6 | phase4a-terrain-tiles-hazards.md | Phase 4 (part A, addendum) | `feat/phase4-terrain` | Road tile kit + tile-snap convention + 4 named hazard tiles + chained test route | Not written |
@@ -83,3 +83,27 @@ prompts — e.g. Phase 1's metadata-channel outcome belongs here.)_
   break `build_assets.py`'s existing 2-arg call site. The throwaway test
   script was deleted rather than committed, per the prompt's ask. Shipped
   on `feat/phase0-core-utils`.
+
+- **2026-09-06 — Phase 1 (`phase1-pipeline-validation.md`): Approved, no
+  changes requested.** Independently reproduced both findings rather than
+  trusting the self-report: rebuilt the test asset (zero-offset
+  `_Steer`→`_Spin` wheel chain, `_Hinge` door, `TieDown_01` with
+  `customData`), exported through the actual pipeline, and parsed the
+  `.glb`'s JSON chunk directly — node names survive verbatim, `extras` is
+  `null` on every node including `TieDown_01`, confirming customData does
+  not survive. **Decision: the sidecar manifest
+  (`manifest_utils.write_manifest`) is the required metadata path for
+  Phase 2+**, now recorded in `asset-roadmap.md`'s Decisions Log.
+  Additionally re-verified the session's own flagged deviation: a genuine
+  bug in `pipeline/blender_usd_to_gltf.py` where Blender's USD importer
+  default (`merge_parent_xform=True`) silently drops any zero-offset
+  Xform-with-one-child — exactly the shape of a `_Spin` pivot nested
+  directly under `_Steer`, or any hinge at its own local origin. Reproduced
+  the pre-fix behavior myself: both `Wheel_FL_Spin` and `Door_Hinge`
+  vanished from the exported glTF, their child mesh reparented directly to
+  the grandparent. The applied fix (`merge_parent_xform=False`) resolves it
+  confirmed. This is a shared-pipeline correctness fix, not scope creep —
+  every phase from here on depends on pivots surviving export, so good call
+  flagging and fixing it now rather than deferring. `main.ts`'s temporary
+  test snippet and the throwaway `pipeline/phase1_test_asset.py` were both
+  cleanly removed. Shipped on `feat/phase1-pipeline-validation`.

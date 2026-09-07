@@ -23,7 +23,15 @@ input_path, output_path = argv[0], argv[1]
 for obj in list(bpy.data.objects):
     bpy.data.objects.remove(obj, do_unlink=True)
 
-bpy.ops.wm.usd_import(filepath=input_path)
+# merge_parent_xform=False: Blender's default (True) elides any Xform prim
+# with no authored xformOps and exactly one child, reparenting that child up
+# a level. A Rig pivot authored at zero relative offset (e.g. a _Spin pivot
+# nested directly under _Steer at the same point -- the common, roadmap-
+# specified case) has no authored ops and exactly one child (its mesh), so
+# the default setting silently drops it from the imported scene -- breaking
+# the pivot-is-parent convention the Babylon runtime's suffix lookup depends
+# on. Confirmed via a headless-Blender diagnostic (Phase 1 validation).
+bpy.ops.wm.usd_import(filepath=input_path, merge_parent_xform=False)
 
 bpy.ops.export_scene.gltf(
     filepath=output_path,
