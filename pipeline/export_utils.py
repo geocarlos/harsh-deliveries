@@ -68,11 +68,31 @@ def bake_point_instancer(stage, instancer_prim, asset_root):
       pointing at the same original template path.
     - Bake as a SIBLING of the instancer, never a child -- deactivating the
       instancer below must not also deactivate the baked geometry.
+    - The template copy itself lives under a dedicated `BakedTemplates`
+      scope that gets deactivated once every instance has an internal
+      reference into it. Deactivating the *scope* (not the template prim
+      each Instance_N references directly) matters: `active` composes
+      across reference arcs, so deactivating the template prim itself
+      would also deactivate every Instance_N that references it. A
+      deactivated ancestor two levels up doesn't reach a prim composed at
+      a different namespace path (`Baked/Instance_N`) via a reference arc,
+      so this excludes the template from the final scene without taking
+      the instances down with it. Skipping this step leaves the template
+      as a live, untransformed, undeactivated duplicate of the prototype
+      sitting at the origin -- confirmed via an actual Blender/glTF
+      export round-trip, not just USD-level inspection (Phase 2 cargo
+      stacking validation).
     - Deactivate (`SetActive(False)`), don't just hide, the original
-      instancer once its data is extracted: a plain
-      visibility=invisible opinion is only a hint that some consumers
-      (e.g. three.js-based tools) ignore outright, leaving a leftover,
-      untransformed prototype rendered at the origin.
+      instancer *and* the external-reference prototype prim it pointed at
+      (per Task 0's own required-external-reference convention, that
+      prototype is a real, separately-authored prim elsewhere in the
+      scene, not a descendant of the instancer -- deactivating the
+      instancer alone leaves it as a second undeactivated, untransformed
+      duplicate at the origin, distinct from the internal
+      `BakedTemplates` copy above). A plain visibility=invisible opinion
+      is only a hint that some consumers (e.g. three.js-based tools)
+      ignore outright, leaving a leftover, untransformed prototype
+      rendered at the origin either way.
     """
     instancer = UsdGeom.PointInstancer(instancer_prim)
     proto_targets = instancer.GetPrototypesRel().GetForwardedTargets()
@@ -83,7 +103,8 @@ def bake_point_instancer(stage, instancer_prim, asset_root):
     dest_layer = stage.GetEditTarget().GetLayer()
     baked_scope = UsdGeom.Scope.Define(stage, parent_path.AppendChild("Baked"))
 
-    template_path = parent_path.AppendChild("BakedTemplate")
+    templates_scope = UsdGeom.Scope.Define(stage, parent_path.AppendChild("BakedTemplates"))
+    template_path = templates_scope.GetPath().AppendChild(proto_prim.GetName())
     Sdf.CopySpec(source_layer, source_path, dest_layer, template_path)
 
     num_instances = len(instancer.GetProtoIndicesAttr().Get())
@@ -100,6 +121,8 @@ def bake_point_instancer(stage, instancer_prim, asset_root):
             op.Set(matrix, Usd.TimeCode(frame))
 
     instancer_prim.SetActive(False)
+    templates_scope.GetPrim().SetActive(False)
+    proto_prim.SetActive(False)
 
 
 def bake_all_point_instancers(stage, asset_root):
