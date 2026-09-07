@@ -52,7 +52,7 @@ declares each *phase* the atomic, independently-testable unit.
 | 4 | ~~[phase3a-vehicle-kit-and-mule.md](phase3a-vehicle-kit-and-mule.md)~~ | Phase 3 | `feat/phase3-vehicle-roster` | **Superseded, not run to completion as-is** — box-only kit read as "a poorly designed toy" on review; replaced by the profile-extrusion + referenced-parts plan below (rows 4a-4c) | Superseded |
 | 4a | [phase3a-shared-vehicle-kit.md](phase3a-shared-vehicle-kit.md) | Phase 3 (part A, revised) | `feat/phase3-vehicle-roster` | Shared/customizable kit: profile-extrusion + frustum geometry helpers, a referenceable wheel-corner sub-asset generator, detail/greeble kit | **Approved** |
 | 4b | [phase3b-mule.md](phase3b-mule.md) | Phase 3 (part B, revised) | `feat/phase3-vehicle-roster` (same branch) | The Mule assembled from 4a's kit: profile-extruded hood/windshield, referenced wheel corners, cargo box, details, hardpoints, collision, door-hinge/cargo-latch kit additions | **Approved** (after two Round 2 fixes) |
-| 4c | phase3c-goat-reuse-proof.md | Phase 3 (part C, revised) | `feat/phase3-vehicle-roster` (same branch) | The Goat assembled from the *same* kit with different parameters (pickup proportions, open bed, off-road tires, long-travel suspension) — the explicit proof that 4a's kit is genuinely reusable, not Mule-specific | Not written — depends on 4b |
+| 4c | [phase3c-goat-reuse-proof.md](phase3c-goat-reuse-proof.md) | Phase 3 (part C, revised) | `feat/phase3-vehicle-roster` (same branch) | The Goat assembled from the *same* kit with different parameters (pickup proportions, open bed, off-road tires, long-travel suspension), plus a suspension-strut mounting fix (affects the Mule too) and a generalized hinge-axis for the tailgate — the explicit proof that 4a's kit is genuinely reusable, not Mule-specific | **Approved** |
 | 4d+ | TBD | Phase 3 (remainder) | TBD | Needle, Bastion (likely mostly kit reuse per 4c's proof) and the Wasp (motorcycle — expected to need its own bespoke pipeline, not this kit) | Not written — planned after 4c's proof lands |
 | 5 | phase4a-terrain-tiles-hazards.md | Phase 4 (part A, addendum) | `feat/phase4-terrain` | Road tile kit + tile-snap convention + 4 named hazard tiles + chained test route | Not written |
 | 6 | phase4b-biome-dressing-variants.md | Phase 4 (part B, addendum) | `feat/phase4-terrain` (same branch as 5) | Biome dressing kits (neutral/mountain/swamp/dockside) + calmed/militarized `UsdVariantSets` + per-tile gameplay tags | Not written |
@@ -343,3 +343,43 @@ prompts — e.g. Phase 1's metadata-channel outcome belongs here.)_
   clean, `npm run check` passes, `main.ts` diff empty, no stray throwaway
   scripts. **Approved.** Committing to `feat/phase3-vehicle-roster` now (no
   PR yet — Phase 3's policy is one PR once 4a+4b+4c all land).
+
+- **2026-09-07 — Phase 3c (`phase3c-goat-reuse-proof.md`): Approved, no
+  changes requested.** Independently re-verified rather than trusting the
+  report. **Structural reuse confirmed**: `build_goat()` calls the same
+  `vehicle_utils` functions `build_mule()` uses (`build_wheel_corner`,
+  `build_hull_section`, `build_window_band`, `add_door_hinge`,
+  `add_cargo_latch`, `build_bumper`, `build_headlight`, `build_mirror`) with
+  Goat-specific parameters — no forked/duplicated geometry-authoring code;
+  the two genuinely new functions (`build_roll_bar`, `build_brush_guard`)
+  live in the shared kit, not inline.
+  **Suspension-strut fix (Task 1) confirmed numerically on both vehicles**,
+  not just visually: computed each corner's strut/mount-cap world-space top
+  via the full local-to-world transform chain (accounting for the corner's
+  own xformOps *and* the reference-time wheel placement) — Mule's strut top
+  lands at world `Y=0.920` against its own `deck_y=0.92`, Goat's at
+  `Y=1.150` against `deck_y=1.15`, both essentially exact, with the mount
+  cap overlapping ~0.025 into the body by design (avoids a hairline gap,
+  same reasoning as the Mule's earlier cargo-box/greenhouse overlap fix).
+  Rendered both standalone wheel corners and both full vehicles myself: the
+  struts now read as tucked into the wheel arch with a small visible mount
+  plate, not floating poles poking through the roofline.
+  **Tailgate hinge generalization (Task 2) confirmed structurally and
+  visually**: `Tailgate_Hinge` authors only a translate op at rest (no
+  rotate yet, correct for a closed default pose), its door panel offset
+  `(0, 0.125, 0)` — along Y, not X, confirming the `hinge_axis="X"`
+  code path engaged correctly (Y-offset = half the tailgate's own height,
+  matching a bottom-hinged panel) — and the session's own
+  `goat_tailgate_open.png` render shows it swinging down correctly on a
+  horizontal hinge, distinct from the Mule's vertical barn-door swing,
+  confirmed via the same underlying function.
+  **Visual differentiation** confirmed by render: open bed with visible
+  side rails vs. the Mule's enclosed box, shorter single cab, wider knobby
+  tires, olive/tan paint, a roll bar and brush guard that read clearly as
+  off-road hardware — unmistakably a different vehicle at a glance, not a
+  reskinned Mule.
+  `usdchecker` clean on all 6 assets (both vehicles, both pairs of wheel
+  corners); `TieDown_01..04` on the Goat's open bed use the same
+  `cargo_utils` constants as the Mule's; `main.ts` diff empty; `npm run
+  check` passes; no stray throwaway scripts. **Approved.** All three
+  Phase 3 sub-prompts (4a/4b/4c) are now approved — opening the PR next.

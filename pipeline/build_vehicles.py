@@ -34,6 +34,11 @@ MULE_FRONT_WHEEL_Z = 1.55
 MULE_REAR_WHEEL_Z = -1.35
 
 MULE_DECK_Y = 0.92             # chassis deck / hood-base height
+# Strut spans the wheel-well depth: the gap between the wheel's own top
+# (2*tire_radius in world space) and the chassis deck it needs to terminate
+# against -- see build_wheel_corner's docstring for the full derivation of
+# why a generic default strut_length clips through the body instead.
+MULE_STRUT_LENGTH = MULE_DECK_Y - 2 * MULE_TIRE_RADIUS
 MULE_HOOD_TOP_Y = 1.42
 MULE_ROOF_Y = 2.35
 MULE_HOOD_FRONT_Z = 2.35        # front bumper line
@@ -59,6 +64,55 @@ MULE_PAINT_COLOR = (0.58, 0.58, 0.62)
 MULE_ROCKER_COLOR = (0.38, 0.38, 0.41)
 MULE_GLASS_COLOR = (0.09, 0.13, 0.18)
 MULE_TRIM_COLOR = (0.13, 0.13, 0.14)
+
+# --- Goat proportions (phase3c-goat-reuse-proof): a genuinely different
+# pickup anatomy from the same shared kit -- larger off-road tires, a
+# lifted stance (longer strut travel, computed the same
+# wheel-well-depth way as the Mule's, per Task 1), a shorter single cab
+# (no tall van greenhouse), and an open bed instead of an enclosed box. ---
+
+GOAT_TIRE_RADIUS = 0.42        # larger, knobby off-road tire vs. the Mule's 0.36 road tire
+GOAT_TIRE_WIDTH = 0.30
+GOAT_RIM_RADIUS = 0.24
+
+GOAT_TRACK_X = 0.95             # wider stance than the Mule's 0.92
+GOAT_FRONT_WHEEL_Z = 1.35
+GOAT_REAR_WHEEL_Z = -1.15       # sits under the open bed, like a real pickup's rear axle
+
+GOAT_DECK_Y = 1.15              # raised chassis deck -- the lifted stance itself
+GOAT_STRUT_LENGTH = GOAT_DECK_Y - 2 * GOAT_TIRE_RADIUS  # 0.31, longer travel than the Mule's 0.20
+
+GOAT_HOOD_TOP_Y = 1.62
+GOAT_ROOF_Y = 2.05               # lower roof than the Mule's van-height 2.35 -- short pickup cab
+GOAT_HOOD_FRONT_Z = 2.05         # front bumper line
+GOAT_WINDSHIELD_BASE_Z = 1.55
+GOAT_CAB_FRONT_Z = 1.15          # windshield/cab box front
+
+GOAT_CAB_HALF_WIDTH = 0.9
+GOAT_CAB_HALF_DEPTH = 0.45       # short single cab, not a long van body
+GOAT_CAB_REAR_Z = GOAT_CAB_FRONT_Z - 2 * GOAT_CAB_HALF_DEPTH
+
+# Open bed sits behind the cab with a real gap (unlike the Mule's cargo box,
+# which merges flush into the greenhouse) -- a pickup's bed and cab are two
+# distinct volumes, not one continuous body.
+GOAT_BED_GAP = 0.1
+GOAT_BED_FRONT_Z = GOAT_CAB_REAR_Z - GOAT_BED_GAP
+GOAT_BED_HALF_Z = 0.9             # 1.8m open bed length
+GOAT_BED_CENTER_Z = GOAT_BED_FRONT_Z - GOAT_BED_HALF_Z
+GOAT_BED_HALF_X = GOAT_CAB_HALF_WIDTH + 0.05
+
+GOAT_BED_FLOOR_HALF_Y = 0.04
+GOAT_BED_FLOOR_CENTER_Y = GOAT_DECK_Y
+GOAT_BED_FLOOR_TOP_Y = GOAT_BED_FLOOR_CENTER_Y + GOAT_BED_FLOOR_HALF_Y
+
+GOAT_RAIL_HEIGHT = 0.25
+GOAT_RAIL_THICKNESS = 0.06
+
+GOAT_PAINT_COLOR = (0.42, 0.46, 0.32)    # olive/desert-tan, distinct from the Mule's grey
+GOAT_ROCKER_COLOR = (0.22, 0.23, 0.20)
+GOAT_GLASS_COLOR = (0.09, 0.13, 0.18)
+GOAT_TRIM_COLOR = (0.13, 0.13, 0.14)
+GOAT_BED_COLOR = (0.15, 0.15, 0.16)       # matte bedliner-style floor/rails
 
 
 def _reference_wheel_corner(stage, rig_scope, corner_name, source_build_path, position):
@@ -87,11 +141,13 @@ def build_mule():
         BUILD_DIR, MODELS_DIR, "MuleFrontCorner",
         tire_radius=MULE_TIRE_RADIUS, tire_width=MULE_TIRE_WIDTH,
         rim_radius=MULE_RIM_RADIUS, steerable=True,
+        strut_length=MULE_STRUT_LENGTH,
     )
     _, rear_corner_path = vehicle_utils.build_wheel_corner(
         BUILD_DIR, MODELS_DIR, "MuleRearCorner",
         tire_radius=MULE_TIRE_RADIUS, tire_width=MULE_TIRE_WIDTH,
         rim_radius=MULE_RIM_RADIUS, steerable=False,
+        strut_length=MULE_STRUT_LENGTH,
     )
 
     stage, scopes = create_asset_stage(build_path, "Vehicle", name)
@@ -296,10 +352,250 @@ def build_mule():
     print(f"Exported {usdz_path.name}, {glb_path.name}")
 
 
+def build_goat():
+    name = "Goat"
+    build_path = BUILD_DIR / "vehicle_goat.usda"
+    if build_path.exists():
+        build_path.unlink()
+
+    # --- Wheel corners: reuse build_wheel_corner (Task 2) with the Goat's
+    # own off-road tire/rim proportions and its own lifted-stance
+    # strut_length (Task 1), not the Mule's numbers. --------------------
+    _, front_corner_path = vehicle_utils.build_wheel_corner(
+        BUILD_DIR, MODELS_DIR, "GoatFrontCorner",
+        tire_radius=GOAT_TIRE_RADIUS, tire_width=GOAT_TIRE_WIDTH,
+        rim_radius=GOAT_RIM_RADIUS, steerable=True,
+        strut_length=GOAT_STRUT_LENGTH,
+    )
+    _, rear_corner_path = vehicle_utils.build_wheel_corner(
+        BUILD_DIR, MODELS_DIR, "GoatRearCorner",
+        tire_radius=GOAT_TIRE_RADIUS, tire_width=GOAT_TIRE_WIDTH,
+        rim_radius=GOAT_RIM_RADIUS, steerable=False,
+        strut_length=GOAT_STRUT_LENGTH,
+    )
+
+    stage, scopes = create_asset_stage(build_path, "Vehicle", name)
+    geometry, rig = scopes["Geometry"], scopes["Rig"]
+    hardpoints, collision = scopes["Hardpoints"], scopes["Collision"]
+
+    # --- Hood-into-windshield profile-extruded panel (Task 3 reuse) -----
+    # Same build_hull_section call as the Mule, but with the Goat's own
+    # profile points: a shorter hood, a lower roofline -- pickup
+    # proportions, not a van's.
+    hood_windshield_profile = [
+        Gf.Vec2f(GOAT_CAB_FRONT_Z, GOAT_DECK_Y),
+        Gf.Vec2f(GOAT_HOOD_FRONT_Z, GOAT_DECK_Y),
+        Gf.Vec2f(GOAT_HOOD_FRONT_Z, GOAT_HOOD_TOP_Y),
+        Gf.Vec2f(GOAT_WINDSHIELD_BASE_Z, GOAT_HOOD_TOP_Y),
+        Gf.Vec2f(GOAT_CAB_FRONT_Z, GOAT_ROOF_Y),
+    ]
+    vehicle_utils.build_hull_section(
+        stage, geometry, "HoodWindshield", hood_windshield_profile,
+        GOAT_CAB_HALF_WIDTH, position=(0, 0, 0),
+        color=GOAT_PAINT_COLOR, preset="paint",
+    )
+
+    # Windshield glass insert, same technique as the Mule's (angled box
+    # matching the windshield segment's own slope) with the Goat's values.
+    windshield_dz = GOAT_CAB_FRONT_Z - GOAT_WINDSHIELD_BASE_Z
+    windshield_dy = GOAT_ROOF_Y - GOAT_HOOD_TOP_Y
+    windshield_len = math.hypot(windshield_dz, windshield_dy)
+    windshield_angle_deg = math.degrees(math.atan2(windshield_dz, windshield_dy))
+    windshield_mid_z = (GOAT_WINDSHIELD_BASE_Z + GOAT_CAB_FRONT_Z) / 2.0
+    windshield_mid_y = (GOAT_HOOD_TOP_Y + GOAT_ROOF_Y) / 2.0
+    outward_z, outward_y = windshield_dy / windshield_len, -windshield_dz / windshield_len
+    glass_offset = 0.02
+    windshield_glass = make_box_mesh(
+        stage, geometry.GetPath().AppendChild("Windshield"),
+        (GOAT_CAB_HALF_WIDTH * 0.82, windshield_len / 2.0 - 0.03, 0.01),
+    )
+    UsdGeom.Xformable(windshield_glass).AddTranslateOp().Set(Gf.Vec3d(
+        0, windshield_mid_y + outward_y * glass_offset, windshield_mid_z + outward_z * glass_offset,
+    ))
+    UsdGeom.Xformable(windshield_glass).AddRotateXOp().Set(windshield_angle_deg)
+    set_color(windshield_glass.GetPrim(), GOAT_GLASS_COLOR, preset="glass-preview")
+
+    # Cab body + greenhouse -- boxes, same reasoning as the Mule's, but
+    # short (single-cab depth) with a real gap behind them to the bed,
+    # instead of extending all the way back to a cargo box.
+    cab_lower_half = (GOAT_CAB_HALF_WIDTH, 0.275, GOAT_CAB_HALF_DEPTH)
+    cab_lower_z = GOAT_CAB_FRONT_Z - cab_lower_half[2]
+    cab_lower = make_box_mesh(stage, geometry.GetPath().AppendChild("CabLower"), cab_lower_half)
+    UsdGeom.Xformable(cab_lower).AddTranslateOp().Set(
+        Gf.Vec3d(0, GOAT_DECK_Y + cab_lower_half[1], cab_lower_z)
+    )
+    set_color(cab_lower.GetPrim(), GOAT_PAINT_COLOR, preset="paint")
+
+    greenhouse_half = (GOAT_CAB_HALF_WIDTH, 0.3, GOAT_CAB_HALF_DEPTH)
+    greenhouse_y = GOAT_ROOF_Y - greenhouse_half[1]
+    greenhouse_z = GOAT_CAB_FRONT_Z - greenhouse_half[2]
+    greenhouse = make_box_mesh(stage, geometry.GetPath().AppendChild("CabGreenhouse"), greenhouse_half)
+    UsdGeom.Xformable(greenhouse).AddTranslateOp().Set(Gf.Vec3d(0, greenhouse_y, greenhouse_z))
+    set_color(greenhouse.GetPrim(), GOAT_PAINT_COLOR, preset="paint")
+
+    side_window_half_x = 0.015
+    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+        vehicle_utils.build_window_band(
+            stage, geometry, f"SideGlass_{side_name}",
+            (sign * (greenhouse_half[0] + side_window_half_x), greenhouse_y, greenhouse_z),
+            half_width=side_window_half_x, band_height=0.3, depth=0.5,
+            color=GOAT_GLASS_COLOR,
+        )
+
+    rocker_half = (GOAT_CAB_HALF_WIDTH + 0.02, 0.15, GOAT_CAB_HALF_DEPTH + 0.05)
+    rocker = make_box_mesh(stage, geometry.GetPath().AppendChild("Rocker"), rocker_half)
+    UsdGeom.Xformable(rocker).AddTranslateOp().Set(Gf.Vec3d(0, GOAT_DECK_Y - rocker_half[1], cab_lower_z))
+    set_color(rocker.GetPrim(), GOAT_ROCKER_COLOR, preset="paint")
+
+    # --- Open bed: a shallow floor pan + low side/front rails, NOT an
+    # enclosed box like the Mule's -- this is the Goat's defining
+    # silhouette difference. --------------------------------------------
+    bed_floor = make_box_mesh(
+        stage, geometry.GetPath().AppendChild("BedFloor"),
+        (GOAT_BED_HALF_X, GOAT_BED_FLOOR_HALF_Y, GOAT_BED_HALF_Z),
+    )
+    UsdGeom.Xformable(bed_floor).AddTranslateOp().Set(
+        Gf.Vec3d(0, GOAT_BED_FLOOR_CENTER_Y, GOAT_BED_CENTER_Z)
+    )
+    set_color(bed_floor.GetPrim(), GOAT_BED_COLOR, preset="unmarked-matte")
+
+    rail_half = (GOAT_RAIL_THICKNESS / 2.0, GOAT_RAIL_HEIGHT / 2.0, GOAT_BED_HALF_Z)
+    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+        rail = make_box_mesh(stage, geometry.GetPath().AppendChild(f"BedRail_{side_name}"), rail_half)
+        UsdGeom.Xformable(rail).AddTranslateOp().Set(Gf.Vec3d(
+            sign * (GOAT_BED_HALF_X - rail_half[0]), GOAT_BED_FLOOR_TOP_Y + rail_half[1], GOAT_BED_CENTER_Z,
+        ))
+        set_color(rail.GetPrim(), GOAT_PAINT_COLOR, preset="paint")
+
+    front_rail_half = (GOAT_BED_HALF_X, GOAT_RAIL_HEIGHT / 2.0, GOAT_RAIL_THICKNESS / 2.0)
+    front_rail = make_box_mesh(stage, geometry.GetPath().AppendChild("BedRail_Front"), front_rail_half)
+    UsdGeom.Xformable(front_rail).AddTranslateOp().Set(Gf.Vec3d(
+        0, GOAT_BED_FLOOR_TOP_Y + front_rail_half[1], GOAT_BED_FRONT_Z - front_rail_half[2],
+    ))
+    set_color(front_rail.GetPrim(), GOAT_PAINT_COLOR, preset="paint")
+    # No rear rail: the tailgate (below) closes that edge instead.
+
+    # TieDown_01..04 -- reuse cargo_utils' pallet-footprint constants
+    # exactly, same convention as the Mule's enclosed bed.
+    corner_x = cargo_utils.PALLET_LENGTH / 2 - cargo_utils.TIE_DOWN_INSET
+    corner_z = cargo_utils.PALLET_WIDTH / 2 - cargo_utils.TIE_DOWN_INSET
+    tie_downs = {
+        "TieDown_01": (corner_x, GOAT_BED_FLOOR_TOP_Y, GOAT_BED_CENTER_Z + corner_z),
+        "TieDown_02": (-corner_x, GOAT_BED_FLOOR_TOP_Y, GOAT_BED_CENTER_Z + corner_z),
+        "TieDown_03": (-corner_x, GOAT_BED_FLOOR_TOP_Y, GOAT_BED_CENTER_Z - corner_z),
+        "TieDown_04": (corner_x, GOAT_BED_FLOOR_TOP_Y, GOAT_BED_CENTER_Z - corner_z),
+    }
+    for tie_name, translate in tie_downs.items():
+        add_hardpoint(hardpoints, tie_name, translate)
+
+    # --- Tailgate (Task 2 reuse): bottom-hinged, swings down, via the same
+    # add_door_hinge function the Mule's side-hinged barn doors use, just
+    # with hinge_axis="X". -------------------------------------------------
+    bed_rear_z = GOAT_BED_CENTER_Z - GOAT_BED_HALF_Z
+    tailgate_z = bed_rear_z - 0.025
+    tailgate_height = GOAT_RAIL_HEIGHT
+    vehicle_utils.add_door_hinge(
+        stage, rig, "Tailgate",
+        (0, GOAT_BED_FLOOR_TOP_Y, tailgate_z),
+        (2.0 * GOAT_BED_HALF_X, tailgate_height, GOAT_RAIL_THICKNESS),
+        door_color=GOAT_PAINT_COLOR,
+        hinge_axis="X",
+    )
+    vehicle_utils.add_cargo_latch(
+        stage, rig, "TailgateLatch",
+        (0, GOAT_BED_FLOOR_TOP_Y + tailgate_height / 2.0, tailgate_z - 0.03),
+    )
+
+    # --- Roll bar + brush guard (Task 3 reuse) --------------------------
+    # Bare bright steel, not the body paint color -- reads as a raw
+    # aftermarket accent against the painted body, and stands out clearly
+    # at full-vehicle scale instead of blending into the olive paint.
+    GOAT_ACCENT_STEEL = (0.6, 0.61, 0.64)
+    vehicle_utils.build_roll_bar(
+        stage, geometry, "RollBar",
+        position=(0, GOAT_BED_FLOOR_TOP_Y, GOAT_CAB_REAR_Z - 0.05),
+        half_width=GOAT_BED_HALF_X - 0.15, height=0.85,
+        bar_radius=0.04, color=GOAT_ACCENT_STEEL,
+    )
+    front_bumper_z = GOAT_HOOD_FRONT_Z + 0.15
+    vehicle_utils.build_brush_guard(
+        stage, geometry, "BrushGuard",
+        position=(0, GOAT_DECK_Y - 0.15, front_bumper_z + 0.06),
+        half_width=GOAT_CAB_HALF_WIDTH * 0.5, height=0.32,
+        bar_radius=0.03, color=GOAT_ACCENT_STEEL,
+    )
+
+    # --- Bumpers, headlights, mirrors (Task 3/4 reuse) ------------------
+    vehicle_utils.build_bumper(
+        stage, geometry, "BumperFront", (0, GOAT_DECK_Y - 0.28, front_bumper_z),
+        half_width=GOAT_CAB_HALF_WIDTH * 0.95, height=0.14, depth=0.12,
+        color=GOAT_TRIM_COLOR, preset="unmarked-matte",
+    )
+    rear_bumper_z = bed_rear_z - 0.15
+    vehicle_utils.build_bumper(
+        stage, geometry, "BumperRear", (0, GOAT_DECK_Y - 0.28, rear_bumper_z),
+        half_width=GOAT_BED_HALF_X * 0.9, height=0.14, depth=0.12,
+        color=GOAT_TRIM_COLOR, preset="unmarked-matte",
+    )
+
+    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+        vehicle_utils.build_headlight(
+            stage, geometry, f"Headlight_{side_name}",
+            (sign * 0.75, GOAT_DECK_Y + 0.2, GOAT_HOOD_FRONT_Z),
+        )
+        vehicle_utils.build_mirror(
+            stage, geometry, f"Mirror_{side_name}",
+            (sign * cab_lower_half[0], GOAT_ROOF_Y - 0.55, cab_lower_z + 0.35),
+        )
+
+    # --- Collision hulls (§2.5): chassis + bed, at minimum --------------
+    chassis_hull = make_box_mesh(
+        stage, collision.GetPath().AppendChild("Hull_Chassis"),
+        (GOAT_CAB_HALF_WIDTH, 0.5, (GOAT_HOOD_FRONT_Z - GOAT_CAB_REAR_Z) / 2.0),
+    )
+    UsdGeom.Xformable(chassis_hull).AddTranslateOp().Set(
+        Gf.Vec3d(0, GOAT_DECK_Y, (GOAT_HOOD_FRONT_Z + GOAT_CAB_REAR_Z) / 2.0)
+    )
+
+    bed_hull_bottom = GOAT_BED_FLOOR_CENTER_Y - GOAT_BED_FLOOR_HALF_Y
+    bed_hull_top = GOAT_BED_FLOOR_TOP_Y + GOAT_RAIL_HEIGHT
+    bed_hull_half_y = (bed_hull_top - bed_hull_bottom) / 2.0
+    bed_hull_center_y = (bed_hull_top + bed_hull_bottom) / 2.0
+    bed_hull = make_box_mesh(
+        stage, collision.GetPath().AppendChild("Hull_Bed"),
+        (GOAT_BED_HALF_X, bed_hull_half_y, GOAT_BED_HALF_Z),
+    )
+    UsdGeom.Xformable(bed_hull).AddTranslateOp().Set(
+        Gf.Vec3d(0, bed_hull_center_y, GOAT_BED_CENTER_Z)
+    )
+
+    # --- Driver seat / exit point hardpoints (§1.6, §2.3) ---------------
+    add_hardpoint(hardpoints, "DriverSeat", (-0.35, GOAT_DECK_Y + 0.3, cab_lower_z))
+    add_hardpoint(hardpoints, "ExitPoint", (-GOAT_CAB_HALF_WIDTH - 0.5, GOAT_DECK_Y - 0.3, cab_lower_z))
+
+    # --- Reference the wheel corners into the assembly ------------------
+    _reference_wheel_corner(stage, rig, "WheelCorner_FL", front_corner_path,
+                             (-GOAT_TRACK_X, GOAT_TIRE_RADIUS, GOAT_FRONT_WHEEL_Z))
+    _reference_wheel_corner(stage, rig, "WheelCorner_FR", front_corner_path,
+                             (GOAT_TRACK_X, GOAT_TIRE_RADIUS, GOAT_FRONT_WHEEL_Z))
+    _reference_wheel_corner(stage, rig, "WheelCorner_RL", rear_corner_path,
+                             (-GOAT_TRACK_X, GOAT_TIRE_RADIUS, GOAT_REAR_WHEEL_Z))
+    _reference_wheel_corner(stage, rig, "WheelCorner_RR", rear_corner_path,
+                             (GOAT_TRACK_X, GOAT_TIRE_RADIUS, GOAT_REAR_WHEEL_Z))
+
+    stage.GetRootLayer().Save()
+
+    usdz_path, glb_path = asset_output_paths(MODELS_DIR, "Vehicle", name)
+    export_usdz(stage, usdz_path)
+    export_gltf(stage, glb_path)
+    print(f"Exported {usdz_path.name}, {glb_path.name}")
+
+
 def build_vehicle_roster():
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     build_mule()
+    build_goat()
 
 
 if __name__ == "__main__":

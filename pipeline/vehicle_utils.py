@@ -60,7 +60,7 @@ def build_wheel_corner(
     tire_radius, tire_width, rim_radius,
     steerable,
     arch_gap=0.06, arch_thickness=0.04, arch_span_degrees=150.0, arch_segments=10,
-    strut_length=0.35, strut_radius=0.035,
+    strut_length=0.35, strut_radius=0.035, strut_cap_radius=None, strut_cap_thickness=0.025,
     rim_proud=0.02,
     tire_color=(0.04, 0.04, 0.04), tire_preset="rubber",
     rim_color=(0.62, 0.62, 0.65), rim_preset="steel",
@@ -92,6 +92,27 @@ def build_wheel_corner(
     and suspension strut live in the Geometry scope (not Rig): they're
     positioned relative to the wheel, not the chassis, but don't themselves
     animate.
+
+    `strut_length` has no sensible generic default -- this asset's local
+    origin is the wheel's own center, and the strut spans local Y
+    `[tire_radius, tire_radius + strut_length]` *before* this corner is
+    referenced into a vehicle assembly. Referencing adds another
+    `tire_radius` on top (wheels are placed at world `y=tire_radius` so they
+    touch the ground), so the strut's world-space top lands at
+    `2*tire_radius + strut_length`. Every caller must therefore compute
+    `strut_length` from ITS OWN vehicle's wheel-well depth -- the gap
+    between the wheel's own top (`2*tire_radius`) and wherever that
+    vehicle's body underside actually sits (its chassis deck height) --
+    i.e. `strut_length = vehicle_deck_y - 2 * tire_radius`. Leaving the
+    default here uncomputed against a real vehicle is exactly the bug this
+    parameter used to have: the strut clipped up through the body instead
+    of terminating at it. A small disc `StrutMount` cap is authored at the
+    strut's top end (using `strut_cap_radius`/`strut_cap_thickness`) so it
+    visually terminates against something instead of ending in bare air --
+    deliberately NOT tilted/steering-linked, since the same un-mirrored
+    asset is referenced at both +X and -X wheel positions (see the rim's
+    own `rim_proud` symmetric-fix comment above for why an asymmetric
+    feature here would only look right at one of the two positions).
 
     Returns (stage, build_path) -- `build_path` is the standalone .usda on
     disk, meant to be referenced into a vehicle assembly (Phase 3b/3c) at
@@ -140,6 +161,20 @@ def build_wheel_corner(
     )
     set_color(strut.GetPrim(), strut_color, preset=strut_preset)
 
+    # Mount-plate cap: terminates the strut against a small disc instead of
+    # bare air, so it reads as attaching to something (the chassis mount)
+    # rather than a pole poking upward with nothing at its end.
+    strut_cap_radius = strut_cap_radius if strut_cap_radius is not None else strut_radius * 2.5
+    strut_top_y = tire_radius + strut_length
+    strut_cap = make_cylinder_mesh(
+        stage, geometry.GetPath().AppendChild("StrutMount"),
+        radius=strut_cap_radius, height=strut_cap_thickness, axis="Y",
+    )
+    UsdGeom.Xformable(strut_cap).AddTranslateOp().Set(
+        Gf.Vec3d(0, strut_top_y + strut_cap_thickness / 2.0, 0)
+    )
+    set_color(strut_cap.GetPrim(), strut_color, preset=strut_preset)
+
     stage.GetRootLayer().Save()
     usdz_path, glb_path = asset_output_paths(models_dir, "Vehicle", name)
     export_usdz(stage, usdz_path)
@@ -150,40 +185,61 @@ def build_wheel_corner(
 
 # --- Task 1 (phase3b): door hinge + cargo latch rig helpers --------------
 
-def add_door_hinge(stage, rig_scope, name, hinge_position, door_size, *,
-                    door_color=(0.5, 0.5, 0.55), door_preset="paint"):
-    """A `_Hinge` pivot (rotateY) + door panel mesh, hung from its hinge
-    edge -- the panel is offset by half its swing width (`door_size[0]`)
-    from the pivot along local X, so the door's FAR edge swings when the
-    pivot rotates, not its hinge edge (the classic mistake would be
-    centering the panel on the pivot, which swings the door through its
-    own hinge line). `hinge_position` is the hinge edge's mount point in
-    `rig_scope`'s space -- for a side-hinged barn-style door, that's an
-    outer corner of the opening -- and the sign of its X component picks
-    which side the door is mounted on. Unlike `build_mirror` (whose rest
-    pose always points outward, the only sensible default for a mirror),
-    the door panel is offset back TOWARD the centerline by default, so a
-    pair of doors called at the opening's two outer corners renders CLOSED
-    (meeting at X=0) at rest -- the believable default for a review render
-    -- and swings outward when the pivot is later rotated open.
+_VALID_HINGE_AXES = ("X", "Y")
 
-    `door_size` is (width, height, thickness) -- `width` is the swing
-    dimension (local X), matching a real hinged door panel.
+
+def add_door_hinge(stage, rig_scope, name, hinge_position, door_size, *,
+                    door_color=(0.5, 0.5, 0.55), door_preset="paint",
+                    hinge_axis="Y"):
+    """A `_Hinge` pivot + door panel mesh, hung from its hinge edge -- the
+    panel is offset by half its swing dimension from the pivot, so the
+    door's FAR edge swings when the pivot rotates, not its hinge edge (the
+    classic mistake would be centering the panel on the pivot, which swings
+    the door through its own hinge line).
+
+    `hinge_axis` picks which edge is hinged and generalizes the offset math
+    to whichever local axis is actually swinging:
+
+    - `"Y"` (default, unchanged from this function's original behavior): a
+      vertical hinge line (rotateY), side-swinging barn-style door.
+      `hinge_position` is the hinge edge's mount point -- an outer corner
+      of the opening -- and the sign of its X component picks which side
+      the door is mounted on. The panel is offset by half `door_size[0]`
+      (`width`, the swing dimension) back TOWARD the centerline, so a pair
+      of doors called at the opening's two outer corners renders CLOSED
+      (meeting at X=0) at rest -- the believable default for a review
+      render -- and swings outward when the pivot is later rotated open.
+    - `"X"`: a horizontal hinge line (rotateX) at the BOTTOM edge of the
+      opening, swinging down -- a pickup tailgate. `hinge_position` is that
+      bottom edge's mount point. The panel is offset by half `door_size[1]`
+      (`height`, the swing dimension here, not width) upward along local Y,
+      so it rests upright and closed against the opening above its hinge --
+      there's no left/right mirroring to reconcile for a single tailgate,
+      unlike the `"Y"` case's two-doors-meeting-at-center convention.
+
+    `door_size` is (width, height, thickness); which of `width`/`height` is
+    the "swing dimension" depends on `hinge_axis` as described above.
 
     Returns (hinge_pivot_prim, door_mesh) -- caller (Task 5, or a future
     vehicle script) poses the pivot open via
-    `rig_utils.set_pivot_rotation(hinge, "Y", degrees)`, or leaves it at
-    rest for the Babylon runtime to drive at play time.
+    `rig_utils.set_pivot_rotation(hinge, hinge_axis, degrees)`, or leaves it
+    at rest for the Babylon runtime to drive at play time.
     """
-    width, height, thickness = door_size
-    side = 1.0 if hinge_position[0] >= 0 else -1.0
+    if hinge_axis not in _VALID_HINGE_AXES:
+        raise ValueError(f"Invalid hinge_axis {hinge_axis!r}; must be one of {_VALID_HINGE_AXES}")
 
+    width, height, thickness = door_size
     hinge = add_pivot_xform(rig_scope, name, "_Hinge", translate=hinge_position)
     door = make_box_mesh(
         stage, hinge.GetPath().AppendChild(f"{name}Door"),
         (width / 2.0, height / 2.0, thickness / 2.0),
     )
-    UsdGeom.Xformable(door).AddTranslateOp().Set(Gf.Vec3d(-side * width / 2.0, 0, 0))
+    if hinge_axis == "Y":
+        side = 1.0 if hinge_position[0] >= 0 else -1.0
+        offset = Gf.Vec3d(-side * width / 2.0, 0, 0)
+    else:
+        offset = Gf.Vec3d(0, height / 2.0, 0)
+    UsdGeom.Xformable(door).AddTranslateOp().Set(offset)
     set_color(door.GetPrim(), door_color, preset=door_preset)
     return hinge, door
 
@@ -283,6 +339,64 @@ def build_window_band(stage, parent_scope, name, position, *, half_width, band_h
     UsdGeom.Xformable(window).AddTranslateOp().Set(Gf.Vec3d(*position))
     set_color(window.GetPrim(), color, preset="glass-preview")
     return window
+
+
+def build_roll_bar(stage, parent_scope, name, position, *,
+                    half_width, height, bar_radius=0.03,
+                    color=(0.15, 0.15, 0.16), preset="steel"):
+    """A "goalpost" roll bar: two vertical posts + one horizontal bar
+    connecting their tops, all straight `make_cylinder_mesh` segments (no
+    bent/curved tube) -- arches over an open cargo bed. `position` is the
+    bar's mount point at the bed floor (its two posts rise from there);
+    `half_width` is the post spacing (local X), `height` the post height."""
+    px, py, pz = position
+    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+        post = make_cylinder_mesh(
+            stage, parent_scope.GetPath().AppendChild(f"{name}Post_{side_name}"),
+            radius=bar_radius, height=height, axis="Y",
+        )
+        UsdGeom.Xformable(post).AddTranslateOp().Set(
+            Gf.Vec3d(px + sign * half_width, py + height / 2.0, pz)
+        )
+        set_color(post.GetPrim(), color, preset=preset)
+
+    crossbar = make_cylinder_mesh(
+        stage, parent_scope.GetPath().AppendChild(f"{name}Crossbar"),
+        radius=bar_radius, height=2.0 * half_width, axis="X",
+    )
+    UsdGeom.Xformable(crossbar).AddTranslateOp().Set(Gf.Vec3d(px, py + height, pz))
+    set_color(crossbar.GetPrim(), color, preset=preset)
+    return crossbar
+
+
+def build_brush_guard(stage, parent_scope, name, position, *,
+                       half_width, height, depth=0.1, bar_radius=0.025,
+                       color=(0.12, 0.12, 0.13), preset="steel"):
+    """A small tubular frame across the front bumper area: two upright
+    posts plus a top and bottom crossbar, all straight cylinder segments
+    (same construction philosophy as `build_roll_bar` -- no curved welded
+    tube). `position` is the frame's mount point at the bumper; the whole
+    frame is offset forward by `depth` so it reads as a standoff guard in
+    front of the bumper rather than z-fighting with it."""
+    px, py, pz = position
+    front_z = pz + depth
+    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+        post = make_cylinder_mesh(
+            stage, parent_scope.GetPath().AppendChild(f"{name}Post_{side_name}"),
+            radius=bar_radius, height=height, axis="Y",
+        )
+        UsdGeom.Xformable(post).AddTranslateOp().Set(
+            Gf.Vec3d(px + sign * half_width, py + height / 2.0, front_z)
+        )
+        set_color(post.GetPrim(), color, preset=preset)
+
+    for bar_name, bar_y in ((f"{name}TopBar", py + height), (f"{name}BottomBar", py)):
+        bar = make_cylinder_mesh(
+            stage, parent_scope.GetPath().AppendChild(bar_name),
+            radius=bar_radius, height=2.0 * half_width, axis="X",
+        )
+        UsdGeom.Xformable(bar).AddTranslateOp().Set(Gf.Vec3d(px, bar_y, front_z))
+        set_color(bar.GetPrim(), color, preset=preset)
 
 
 # --- Task 4: hull/cab composition using profile extrusion -----------------
