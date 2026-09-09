@@ -170,15 +170,16 @@ def make_box_mesh(stage, path, half_extents):
     return make_mesh(stage, path, points, face_vertex_counts, face_vertex_indices, uvs=uvs)
 
 
-def make_cylinder_mesh(stage, path, radius, height, axis="Y", sides=16):
-    """An explicit tessellated cylinder Mesh, in place of UsdGeom.Cylinder --
-    see make_box_mesh for why. `sides` trades roundness for vertex count; 16
-    reads as reasonably round at small-prop scale while staying flat-shaded/
-    low-poly -- raise it for parts large enough in frame for facets to read
-    as angular rather than round."""
+def make_frustum_mesh(stage, path, bottom_radius, top_radius, height, axis="Y", sides=16):
+    """An explicit tessellated frustum Mesh -- generalizes make_cylinder_mesh
+    to allow different top/bottom radii (a tapered cylinder), e.g. an angled,
+    armored turret housing instead of a plain drum. `sides` trades roundness
+    for vertex count; 16 reads as reasonably round at small-prop scale while
+    staying flat-shaded/low-poly -- raise it for parts large enough in frame
+    for facets to read as angular rather than round."""
     half_h = height / 2.0
     points = []
-    for ring_y in (-half_h, half_h):
+    for radius, ring_y in ((bottom_radius, -half_h), (top_radius, half_h)):
         for i in range(sides):
             angle = 2.0 * math.pi * i / sides
             cx = radius * math.cos(angle)
@@ -208,6 +209,70 @@ def make_cylinder_mesh(stage, path, radius, height, axis="Y", sides=16):
     uvs += [polar_uv(i) for i in range(sides)]  # top cap
     for i in range(sides):
         u0, u1 = i / sides, (i + 1) / sides
+        uvs += [Gf.Vec2f(u0, 0), Gf.Vec2f(u1, 0), Gf.Vec2f(u1, 1), Gf.Vec2f(u0, 1)]
+
+    return make_mesh(stage, path, points, face_vertex_counts, face_vertex_indices, uvs=uvs)
+
+
+def make_cylinder_mesh(stage, path, radius, height, axis="Y", sides=16):
+    """An explicit tessellated cylinder Mesh, in place of UsdGeom.Cylinder --
+    see make_box_mesh for why. A thin wrapper over make_frustum_mesh with
+    equal top/bottom radii, rather than a second ring-generation
+    implementation."""
+    return make_frustum_mesh(stage, path, radius, radius, height, axis=axis, sides=sides)
+
+
+def make_profile_extrusion(stage, path, profile_points, half_width):
+    """A 2D polygon (`profile_points`, a list of Gf.Vec2f -- each `(z, y)`:
+    depth, height -- walked in one consistent winding direction and
+    implicitly closed back to its first point) extruded across the width
+    axis (X), giving a real sloped/angled cross-section instead of a box --
+    e.g. a vehicle hood's slope or a wheel-arch flare. Two end caps (wound
+    opposite each other so both face outward) plus one side quad per
+    profile edge connecting the two extruded copies -- works for any
+    profile the caller passes, not a hardcoded shape."""
+    n = len(profile_points)
+    points = []
+    for x in (-half_width, half_width):
+        for z, y in profile_points:
+            points.append(Gf.Vec3f(x, y, z))
+    # points[0:n] = -X side, points[n:2*n] = +X side
+
+    face_vertex_counts = [n, n]
+    face_vertex_indices = list(reversed(range(n))) + list(range(n, 2 * n))
+    for i in range(n):
+        j = (i + 1) % n
+        face_vertex_counts.append(4)
+        face_vertex_indices.extend([i, j, n + j, n + i])
+
+    # Caps: normalize (z, y) against the profile's own bounding box -- valid,
+    # not art-directed, same rationale as the cylinder's polar cap UVs. Side
+    # quads: unwrap around the profile's perimeter (u) x width (v).
+    zs = [p[0] for p in profile_points]
+    ys = [p[1] for p in profile_points]
+    z_span = (max(zs) - min(zs)) or 1.0
+    y_span = (max(ys) - min(ys)) or 1.0
+
+    def cap_uv(i):
+        z, y = profile_points[i]
+        return Gf.Vec2f((z - min(zs)) / z_span, (y - min(ys)) / y_span)
+
+    uvs = [cap_uv(i) for i in reversed(range(n))]  # -X cap
+    uvs += [cap_uv(i) for i in range(n)]  # +X cap
+
+    edge_lengths = []
+    for i in range(n):
+        j = (i + 1) % n
+        z0, y0 = profile_points[i]
+        z1, y1 = profile_points[j]
+        edge_lengths.append(math.hypot(z1 - z0, y1 - y0))
+    perimeter = sum(edge_lengths) or 1.0
+
+    cum = 0.0
+    for length in edge_lengths:
+        u0 = cum / perimeter
+        cum += length
+        u1 = cum / perimeter
         uvs += [Gf.Vec2f(u0, 0), Gf.Vec2f(u1, 0), Gf.Vec2f(u1, 1), Gf.Vec2f(u0, 1)]
 
     return make_mesh(stage, path, points, face_vertex_counts, face_vertex_indices, uvs=uvs)

@@ -11,6 +11,7 @@ inconsistent or missing outright.
 
 Usage: blender --background --python blender_usd_to_gltf.py -- <in.usdc> <out.glb>
 """
+import re
 import sys
 
 import bpy
@@ -32,6 +33,28 @@ for obj in list(bpy.data.objects):
 # the pivot-is-parent convention the Babylon runtime's suffix lookup depends
 # on. Confirmed via a headless-Blender diagnostic (Phase 1 validation).
 bpy.ops.wm.usd_import(filepath=input_path, merge_parent_xform=False)
+
+# A vehicle that references the SAME wheel-corner sub-asset at more than one
+# position (e.g. one front-corner asset referenced at both FL and FR --
+# phase3b-mule prompt, Task 4) authors the exact same pivot leaf names
+# ("Wheel_Steer", "Wheel_Spin", ...) at more than one USD prim path. USD has
+# no problem with this (the ABSOLUTE paths are still unique), but Blender's
+# object namespace is flat, so its USD importer auto-deduplicates every
+# repeat by appending ".001", ".002", ... AFTER our own suffix -- e.g.
+# "Wheel_Spin" -> "Wheel_Spin.001" -- which silently breaks the roadmap's
+# §2.2 suffix-lookup convention (`name.endsWith("_Spin")`) for every
+# occurrence but the first. Confirmed via an actual Babylon-side load: only
+# 1 of 4 `_Spin` nodes and 1 of 2 `_Steer` nodes survived the round trip
+# with a usable name. Move Blender's dedup tag to BEFORE our suffix instead
+# of after it, so every renamed object still ends with the exact suffix the
+# runtime looks up.
+_PIVOT_SUFFIXES = ("_Steer", "_Spin", "_Hinge", "_Latch")
+_DEDUP_RE = re.compile(r"^(.*)(" + "|".join(_PIVOT_SUFFIXES) + r")\.(\d+)$")
+for obj in bpy.data.objects:
+    match = _DEDUP_RE.match(obj.name)
+    if match:
+        prefix, suffix, dedup_num = match.groups()
+        obj.name = f"{prefix}_{dedup_num}{suffix}"
 
 bpy.ops.export_scene.gltf(
     filepath=output_path,
